@@ -435,11 +435,13 @@
 
         // Test proxy services
         async function testProxyServices() {
-            updateProxyStatus('🔄 Testing proxy services...');
+            updateProxyStatus('🔄 Testing all proxy services...');
             
             const testUrl = 'https://fantasy.premierleague.com/api/bootstrap-static/';
+            const workingProxies = [];
+            const failedProxies = [];
             
-            // Test proxies one by one and stop at first working one
+            // Test ALL proxies to see which ones work
             for (const proxy of proxyServices) {
                 try {
                     updateProxyStatus(`Testing ${proxy.name}...`);
@@ -454,36 +456,147 @@
                     
                     if (data && data.elements && data.elements.length > 0) {
                         proxy.active = true;
-                        workingProxy = proxy;
+                        workingProxies.push(proxy);
                         console.log(`${proxy.name} proxy working successfully`);
-                        
-                        // Success - stop testing other proxies
-                        const cacheStatus = getCacheStatus();
-                        updateProxyStatus(`✅ Connected via ${workingProxy.name} | ${cacheStatus}`, 'connected');
-                        document.getElementById('connectionStatus').className = 'status-indicator connected';
-                        document.getElementById('proxyResults').innerHTML = `
-                            ✅ ${proxy.name} - Working<br>
-                            <small style="color: #666;">${cacheStatus}</small>
-                            <button onclick="refreshCreatorCache()" style="margin-left: 10px; padding: 2px 8px; background: #007bff; color: white; border: none; border-radius: 3px; font-size: 0.8rem; cursor: pointer;">🔄 Refresh Cache</button>
-                        `;
-                        enableButtons();
-                        
-                        // Start preloading creator data in background (will use cache if available)
-                        preloadContentCreatorDataBackground();
-                        return;
+                    } else {
+                        failedProxies.push(`${proxy.name} - Invalid response`);
                     }
                 } catch (error) {
+                    failedProxies.push(`${proxy.name} - ${error.message}`);
                     console.warn(`${proxy.name} proxy failed:`, error);
                 }
             }
-
-            // If we get here, all proxies failed
-            updateProxyStatus('❌ All proxy services failed. Please try again later.', 'error');
-            document.getElementById('connectionStatus').className = 'status-indicator error';
-            document.getElementById('proxyResults').innerHTML = '❌ All proxy services failed';
-            showFallbackOptions();
+            
+            if (workingProxies.length > 0) {
+                // Set the first working proxy as primary, but keep others as fallbacks
+                workingProxy = workingProxies[0];
+                
+                const cacheStatus = getCacheStatus();
+                updateProxyStatus(`✅ Connected with ${workingProxies.length} proxy(es) | ${cacheStatus}`, 'connected');
+                document.getElementById('connectionStatus').className = 'status-indicator connected';
+                
+                const resultMessages = [
+                    ...workingProxies.map(p => `✅ ${p.name} - Working`),
+                    ...failedProxies.map(msg => `❌ ${msg}`)
+                ];
+                
+                document.getElementById('proxyResults').innerHTML = `
+                    ${resultMessages.join('<br>')}
+                    <br><small style="color: #666;">${cacheStatus}</small>
+                    <button onclick="refreshCreatorCache()" style="margin-left: 10px; padding: 2px 8px; background: #007bff; color: white; border: none; border-radius: 3px; font-size: 0.8rem; cursor: pointer;">🔄 Refresh Cache</button>
+                `;
+                
+                enableButtons();
+                
+                // Start preloading creator data in background
+                preloadContentCreatorDataBackground();
+            } else {
+                updateProxyStatus('❌ All proxy services failed. Please try again later.', 'error');
+                document.getElementById('connectionStatus').className = 'status-indicator error';
+                document.getElementById('proxyResults').innerHTML = failedProxies.join('<br>');
+                showFallbackOptions();
+            }
         }
 
+        // ADD new function to show more helpful error messages
+        function showError(message) {
+            let helpfulMessage = message;
+            let solutions = [
+                'Check if the team/league ID is correct',
+                'Refresh the page to reconnect to proxy services',
+                'Try again in a few minutes'
+            ];
+            
+            // Provide specific help based on error type
+            if (message.includes('All proxy services failed')) {
+                helpfulMessage = 'All proxy services are currently having issues';
+                solutions = [
+                    'Wait 2-3 minutes and refresh the page',
+                    'Try again during off-peak hours',
+                    'Check if the FPL website is accessible: fantasy.premierleague.com'
+                ];
+            } else if (message.includes('Failed to fetch')) {
+                helpfulMessage = 'Network connection issues detected';
+                solutions = [
+                    'Check your internet connection',
+                    'Refresh the page to reconnect',
+                    'Try using a different browser or device'
+                ];
+            } else if (message.includes('Invalid response')) {
+                helpfulMessage = 'Proxy returned invalid data (rate limiting likely)';
+                solutions = [
+                    'Wait 5 minutes for rate limits to reset',
+                    'Refresh the page to try different proxies',
+                    'Try analyzing during off-peak hours'
+                ];
+            }
+            
+            document.getElementById('results').innerHTML = `
+                <div class="error">
+                    <strong>Error:</strong> ${helpfulMessage}<br><br>
+                    <strong>What you can try:</strong>
+                    <ul>
+                        ${solutions.map(solution => `<li>${solution}</li>`).join('')}
+                    </ul>
+                    <br>
+                    <button onclick="window.location.reload()" style="padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                        🔄 Refresh Page & Reconnect
+                    </button>
+                </div>
+            `;
+            hideLoading();
+        }
+
+        // ADD new function to handle cache status (if not already added)
+        function getCacheStatus() {
+            try {
+                const cached = localStorage.getItem('fpl_creator_cache_v1');
+                if (!cached) return 'No cache available';
+                
+                const cacheData = JSON.parse(cached);
+                const cacheAge = Date.now() - cacheData.timestamp;
+                const hoursOld = Math.floor(cacheAge / (1000 * 60 * 60));
+                const minutesOld = Math.floor((cacheAge % (1000 * 60 * 60)) / (1000 * 60));
+                
+                const validCreators = Object.values(cacheData.data).filter(c => c.starting11 && c.starting11.length > 0).length;
+                
+                if (hoursOld > 0) {
+                    return `Cache: ${validCreators} creators, ${hoursOld}h ${minutesOld}m old`;
+                } else {
+                    return `Cache: ${validCreators} creators, ${minutesOld}m old`;
+                }
+            } catch (error) {
+                return 'Cache corrupted';
+            }
+        }
+
+        // ADD refresh creator cache function if not already added
+        function refreshCreatorCache() {
+            const button = event.target;
+            const originalText = button.textContent;
+            button.textContent = '🔄 Refreshing...';
+            button.disabled = true;
+            
+            // Clear cache and reload
+            localStorage.removeItem('fpl_creator_cache_v1');
+            contentCreatorData = {};
+            
+            // Restart background loading
+            preloadContentCreatorDataBackground().then(() => {
+                button.textContent = originalText;
+                button.disabled = false;
+                
+                // Show success message
+                const successDiv = document.createElement('div');
+                successDiv.style.cssText = 'position: fixed; top: 20px; right: 20px; background: #d4edda; border: 1px solid #c3e6cb; color: #155724; padding: 15px; border-radius: 8px; z-index: 1000; box-shadow: 0 4px 8px rgba(0,0,0,0.1);';
+                successDiv.innerHTML = '✅ Creator data refreshed successfully!';
+                document.body.appendChild(successDiv);
+                
+                setTimeout(() => {
+                    document.body.removeChild(successDiv);
+                }, 3000);
+            });
+        }
 
 
         async function testProxyServices() {
@@ -780,21 +893,51 @@
 
         // Enhanced fetch function
         async function fetchWithProxy(url) {
-            if (!workingProxy) {
-                throw new Error('No working proxy available');
-            }
-
             const baseUrl = 'https://fantasy.premierleague.com/api/';
             const fullUrl = url.startsWith('http') ? url : baseUrl + url;
             
-            try {
-                const proxyUrl = workingProxy.url + encodeURIComponent(fullUrl);
-                return await workingProxy.handler(proxyUrl);
-            } catch (error) {
-                console.error(`${workingProxy.name} proxy failed:`, error);
-                throw new Error(`Proxy request failed: ${error.message}`);
+            // Try all available proxies, not just the "working" one
+            const proxiesToTry = workingProxy ? 
+                [workingProxy, ...proxyServices.filter(p => p !== workingProxy)] : 
+                proxyServices;
+            
+            let lastError = null;
+            
+            for (const proxy of proxiesToTry) {
+                try {
+                    console.log(`Trying ${proxy.name} proxy for request...`);
+                    const proxyUrl = proxy.url + encodeURIComponent(fullUrl);
+                    
+                    const timeoutPromise = new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('Timeout')), 8000)
+                    );
+                    
+                    const fetchPromise = proxy.handler(proxyUrl);
+                    const data = await Promise.race([fetchPromise, timeoutPromise]);
+                    
+                    // Validate response
+                    if (!data || (typeof data === 'string' && data.includes('<html'))) {
+                        throw new Error('Invalid response format - got HTML instead of JSON');
+                    }
+                    
+                    console.log(`✅ ${proxy.name} proxy successful`);
+                    return data;
+                    
+                } catch (error) {
+                    console.warn(`❌ ${proxy.name} proxy failed:`, error.message);
+                    lastError = error;
+                    
+                    // Add delay before trying next proxy
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
             }
+            
+            // If all proxies failed, throw the last error
+            throw new Error(`All proxy services failed. Last error: ${lastError?.message || 'Unknown error'}`);
         }
+
+
+
 
         // Progress tracking
         function addProgressStep(message, status = 'pending') {
