@@ -428,6 +428,10 @@
         let isLoadingCreators = false;
         let cachedLeagueTeamData = {}; // Store league team picks data
         let cachedTeamNames = {}; // Store team names for display
+        let contentCreatorCacheKey = 'fpl_creator_cache_v1';
+        let cacheExpiryHours = 6; // Cache expires after 6 hours (since data changes daily)
+
+
 
         // Test proxy services
         async function testProxyServices() {
@@ -442,7 +446,7 @@
                     
                     const proxyUrl = proxy.url + encodeURIComponent(testUrl);
                     const timeoutPromise = new Promise((_, reject) => 
-                        setTimeout(() => reject(new Error('Timeout')), 6000) // Reduced timeout
+                        setTimeout(() => reject(new Error('Timeout')), 6000)
                     );
                     
                     const fetchPromise = proxy.handler(proxyUrl);
@@ -454,12 +458,17 @@
                         console.log(`${proxy.name} proxy working successfully`);
                         
                         // Success - stop testing other proxies
-                        updateProxyStatus(`✅ Connected via ${workingProxy.name}`, 'connected');
+                        const cacheStatus = getCacheStatus();
+                        updateProxyStatus(`✅ Connected via ${workingProxy.name} | ${cacheStatus}`, 'connected');
                         document.getElementById('connectionStatus').className = 'status-indicator connected';
-                        document.getElementById('proxyResults').innerHTML = `✅ ${proxy.name} - Working`;
+                        document.getElementById('proxyResults').innerHTML = `
+                            ✅ ${proxy.name} - Working<br>
+                            <small style="color: #666;">${cacheStatus}</small>
+                            <button onclick="refreshCreatorCache()" style="margin-left: 10px; padding: 2px 8px; background: #007bff; color: white; border: none; border-radius: 3px; font-size: 0.8rem; cursor: pointer;">🔄 Refresh Cache</button>
+                        `;
                         enableButtons();
                         
-                        // Start preloading creator data in background (don't wait for it)
+                        // Start preloading creator data in background (will use cache if available)
                         preloadContentCreatorDataBackground();
                         return;
                     }
@@ -474,7 +483,6 @@
             document.getElementById('proxyResults').innerHTML = '❌ All proxy services failed';
             showFallbackOptions();
         }
-
 
 
 
@@ -526,11 +534,20 @@
         // REPLACE the existing preloadContentCreatorData function with this background version
         async function preloadContentCreatorDataBackground() {
             if (isLoadingCreators) return;
+            
+            // First, try to load from browser cache
+            const cachedData = loadContentCreatorCache();
+            if (cachedData) {
+                contentCreatorData = cachedData.data;
+                console.log(`🎉 Loaded ${Object.keys(contentCreatorData).length} content creators from cache! (No API calls needed)`);
+                console.log(`Cache created: ${new Date(cachedData.timestamp).toLocaleString()}`);
+                updateProxyStatus(`✅ Connected via ${workingProxy.name} - Creators loaded from cache`, 'connected');
+                return;
+            }
+            
             isLoadingCreators = true;
+            console.log('🎬 No valid cache found. Starting fresh download of content creator data...');
             
-            console.log('🎬 Starting background preload of content creator data...');
-            
-            // Don't update UI status - let it show as just "Connected"
             const loadedCreators = [];
             const failedCreators = [];
             
@@ -552,10 +569,10 @@
                     };
                     
                     loadedCreators.push(creator.name);
-                    console.log(`✅ Background loaded ${creator.name}`);
+                    console.log(`✅ Downloaded ${creator.name}`);
                     
                 } catch (error) {
-                    console.warn(`❌ Failed to background load ${creator.name}:`, error);
+                    console.warn(`❌ Failed to download ${creator.name}:`, error);
                     failedCreators.push(creator.name);
                     contentCreatorData[creator.id] = {
                         name: creator.name,
@@ -567,14 +584,135 @@
                 }
             }
             
-            isLoadingCreators = false;
-            console.log(`🎉 Background loading complete: ${loadedCreators.length} loaded, ${failedCreators.length} failed`);
+            // Save successful downloads to cache
+            if (loadedCreators.length > 0) {
+                saveContentCreatorCache(contentCreatorData);
+                console.log(`💾 Saved ${loadedCreators.length} creators to cache for future visits`);
+            }
             
-            // Only show failed creators if more than half failed
-            if (failedCreators.length > loadedCreators.length) {
-                console.warn('⚠️ Most content creators failed to load:', failedCreators);
+            isLoadingCreators = false;
+            console.log(`🎉 Download complete: ${loadedCreators.length} loaded, ${failedCreators.length} failed`);
+            
+            // Update status message
+            if (loadedCreators.length > failedCreators.length) {
+                updateProxyStatus(`✅ Connected via ${workingProxy.name} - ${loadedCreators.length} creators cached`, 'connected');
+            } else {
+                updateProxyStatus(`✅ Connected via ${workingProxy.name} - Limited creator data`, 'connected');
             }
         }
+
+
+
+        // ADD new function to save creator data to browser cache
+        function saveContentCreatorCache(data) {
+            try {
+                const cacheData = {
+                    data: data,
+                    timestamp: Date.now(),
+                    gameweek: currentGameweek,
+                    version: 'v1'
+                };
+                
+                localStorage.setItem(contentCreatorCacheKey, JSON.stringify(cacheData));
+                console.log('💾 Content creator data saved to browser cache');
+                
+            } catch (error) {
+                console.warn('Failed to save to cache:', error);
+            }
+        }
+
+        // ADD new function to load creator data from browser cache
+        function loadContentCreatorCache() {
+            try {
+                const cached = localStorage.getItem(contentCreatorCacheKey);
+                if (!cached) return null;
+                
+                const cacheData = JSON.parse(cached);
+                
+                // Check if cache is still valid
+                const now = Date.now();
+                const cacheAge = now - cacheData.timestamp;
+                const maxAge = cacheExpiryHours * 60 * 60 * 1000; // Convert hours to milliseconds
+                
+                // Check if cache is too old or from different gameweek
+                if (cacheAge > maxAge || cacheData.gameweek !== currentGameweek) {
+                    console.log('🗑️ Cache expired or from different gameweek, will download fresh data');
+                    localStorage.removeItem(contentCreatorCacheKey);
+                    return null;
+                }
+                
+                // Validate cache data
+                if (!cacheData.data || typeof cacheData.data !== 'object') {
+                    console.log('🗑️ Invalid cache data, will download fresh data');
+                    localStorage.removeItem(contentCreatorCacheKey);
+                    return null;
+                }
+                
+                return cacheData;
+                
+            } catch (error) {
+                console.warn('Failed to load from cache:', error);
+                localStorage.removeItem(contentCreatorCacheKey);
+                return null;
+            }
+        }
+
+        // ADD new function to manually refresh creator cache
+        function refreshCreatorCache() {
+            const button = event.target;
+            const originalText = button.textContent;
+            button.textContent = '🔄 Refreshing...';
+            button.disabled = true;
+            
+            // Clear cache and reload
+            localStorage.removeItem(contentCreatorCacheKey);
+            contentCreatorData = {};
+            
+            // Restart background loading
+            preloadContentCreatorDataBackground().then(() => {
+                button.textContent = originalText;
+                button.disabled = false;
+                
+                // Show success message
+                const successDiv = document.createElement('div');
+                successDiv.style.cssText = 'position: fixed; top: 20px; right: 20px; background: #d4edda; border: 1px solid #c3e6cb; color: #155724; padding: 15px; border-radius: 8px; z-index: 1000; box-shadow: 0 4px 8px rgba(0,0,0,0.1);';
+                successDiv.innerHTML = '✅ Creator data refreshed successfully!';
+                document.body.appendChild(successDiv);
+                
+                setTimeout(() => {
+                    document.body.removeChild(successDiv);
+                }, 3000);
+            });
+        }
+
+        // ADD cache status display function
+        function getCacheStatus() {
+            const cached = localStorage.getItem(contentCreatorCacheKey);
+            if (!cached) return 'No cache available';
+            
+            try {
+                const cacheData = JSON.parse(cached);
+                const cacheAge = Date.now() - cacheData.timestamp;
+                const hoursOld = Math.floor(cacheAge / (1000 * 60 * 60));
+                const minutesOld = Math.floor((cacheAge % (1000 * 60 * 60)) / (1000 * 60));
+                
+                const validCreators = Object.values(cacheData.data).filter(c => c.starting11 && c.starting11.length > 0).length;
+                
+                if (hoursOld > 0) {
+                    return `Cache: ${validCreators} creators, ${hoursOld}h ${minutesOld}m old`;
+                } else {
+                    return `Cache: ${validCreators} creators, ${minutesOld}m old`;
+                }
+            } catch (error) {
+                return 'Cache corrupted';
+            }
+        }
+
+
+
+
+
+
 
         // ADD this new function to handle the league size selection
         function updateLeagueSize() {
