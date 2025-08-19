@@ -380,7 +380,7 @@
             { id: 1587, name: "Ross (FPL Raptor)" },
             { id: 6586, name: "Ben Crellin (FF Hub)" },
             { id: 200, name: "FPL Focal" },
-            { id: 44, name: "Lets Talk FPL" },
+            { id: 44, name: "Andy Lets Talk FPL" },
             { id: 1320, name: "FPL Harry" },
             { id: 14501, name: "FPL Pickle" },
             { id: 963, name: "BigMan Bakar" },
@@ -2008,7 +2008,8 @@
                     return {
                         entryId,
                         name: cachedTeamNames[entryId] || `Team ${entryId}`,
-                        picks: cachedData.starting11,
+                        starting11: cachedData.starting11,
+                        fullSquad: cachedData.fullSquad || cachedData.picks.map(pick => pick.element), // Fallback if fullSquad not cached
                         error: false
                     };
                 });
@@ -2019,56 +2020,85 @@
                 for (const creator of availableCreators) {
                     const creatorData = contentCreatorData[creator.id];
                     const creatorStarting11 = creatorData.starting11;
+                    const creatorFullSquad = creatorData.fullSquad || creatorData.picks.map(pick => pick.element);
                     
-                    let totalMatches = 0;
-                    let matchingTeams = 0;
+                    let totalMatches11 = 0;
+                    let totalMatches15 = 0;
+                    let matchingTeams11 = 0;
+                    let matchingTeams15 = 0;
                     const teamMatches = [];
 
                     for (const teamData of teamPicksData) {
-                        if (teamData.error || !teamData.picks) continue;
+                        if (teamData.error || !teamData.starting11 || !teamData.fullSquad) continue;
                         
-                        const teamStarting11 = teamData.picks;
-                        const commonPlayers = creatorStarting11.filter(player => teamStarting11.includes(player));
-                        const matchCount = commonPlayers.length;
+                        const teamStarting11 = teamData.starting11;
+                        const teamFullSquad = teamData.fullSquad;
                         
-                        if (matchCount > 0) {
-                            totalMatches += matchCount;
-                            matchingTeams++;
-                            
-                            teamMatches.push({
-                                name: teamData.name,
-                                entryId: teamData.entryId,
-                                matches: matchCount,
-                                percentage: Math.round((matchCount / 11) * 100)
-                            });
+                        // Starting XI comparison
+                        const commonPlayers11 = creatorStarting11.filter(player => teamStarting11.includes(player));
+                        const matchCount11 = commonPlayers11.length;
+                        
+                        // Full squad comparison
+                        const commonPlayers15 = creatorFullSquad.filter(player => teamFullSquad.includes(player));
+                        const matchCount15 = commonPlayers15.length;
+                        
+                        if (matchCount11 > 0) {
+                            totalMatches11 += matchCount11;
+                            matchingTeams11++;
                         }
-                    }
-
-                    if (totalMatches > 0 || matchingTeams === 0) { // Include creators with 0 matches too
-                        // Sort team matches by percentage (highest first)
-                        teamMatches.sort((a, b) => b.percentage - a.percentage);
                         
-                        // Find the highest percentage match for this creator
-                        const highestMatch = teamMatches.length > 0 ? teamMatches[0] : { percentage: 0 };
+                        if (matchCount15 > 0) {
+                            totalMatches15 += matchCount15;
+                            matchingTeams15++;
+                        }
                         
-                        comparisons.push({
-                            creator: creator.name,
-                            totalMatches,
-                            matchingTeams,
-                            averageMatches: teamPicksData.length > 0 ? (totalMatches / teamPicksData.length).toFixed(1) : '0.0',
-                            topMatches: teamMatches.slice(0, 5), // Show top 5 matches
-                            highestPercentage: highestMatch.percentage, // For sorting
-                            allMatches: teamMatches // Store all matches for detailed view
+                        // Store team match data (include teams with 0 matches for complete view)
+                        teamMatches.push({
+                            name: teamData.name,
+                            entryId: teamData.entryId,
+                            matches11: matchCount11,
+                            matches15: matchCount15,
+                            percentage11: Math.round((matchCount11 / 11) * 100),
+                            percentage15: Math.round((matchCount15 / 15) * 100)
                         });
                     }
+
+                    // Sort team matches by full squad percentage first, then starting XI
+                    teamMatches.sort((a, b) => {
+                        if (b.percentage15 !== a.percentage15) {
+                            return b.percentage15 - a.percentage15;
+                        }
+                        return b.percentage11 - a.percentage11;
+                    });
+
+                    // Find the highest percentage matches for sorting creators
+                    const highestMatch11 = teamMatches.length > 0 ? Math.max(...teamMatches.map(t => t.percentage11)) : 0;
+                    const highestMatch15 = teamMatches.length > 0 ? Math.max(...teamMatches.map(t => t.percentage15)) : 0;
+                    
+                    comparisons.push({
+                        creator: creator.name,
+                        totalMatches11,
+                        totalMatches15,
+                        matchingTeams11,
+                        matchingTeams15,
+                        averageMatches11: teamPicksData.length > 0 ? (totalMatches11 / teamPicksData.length).toFixed(1) : '0.0',
+                        averageMatches15: teamPicksData.length > 0 ? (totalMatches15 / teamPicksData.length).toFixed(1) : '0.0',
+                        topMatches: teamMatches.filter(t => t.matches11 > 0 || t.matches15 > 0).slice(0, 5), // Show top 5 matches
+                        highestPercentage11: highestMatch11,
+                        highestPercentage15: highestMatch15,
+                        allMatches: teamMatches.filter(t => t.matches11 > 0 || t.matches15 > 0) // Store all non-zero matches
+                    });
                 }
 
-                // Sort by highest percentage match first, then by total matches
+                // Sort by highest full squad percentage first, then starting XI percentage
                 comparisons.sort((a, b) => {
-                    if (b.highestPercentage !== a.highestPercentage) {
-                        return b.highestPercentage - a.highestPercentage;
+                    if (b.highestPercentage15 !== a.highestPercentage15) {
+                        return b.highestPercentage15 - a.highestPercentage15;
                     }
-                    return b.totalMatches - a.totalMatches;
+                    if (b.highestPercentage11 !== a.highestPercentage11) {
+                        return b.highestPercentage11 - a.highestPercentage11;
+                    }
+                    return b.totalMatches15 - a.totalMatches15;
                 });
 
                 const comparisonHTML = `
@@ -2079,11 +2109,15 @@
                             <small>✅ Using cached data - No API calls needed! Analyzed ${teamPicksData.length} teams with ${availableCreators.length} creators instantly.</small>
                         </div>
                         
+                        <div style="background: #e3f2fd; border: 1px solid #90caf9; border-radius: 8px; padding: 10px; margin-bottom: 15px; text-align: center;">
+                            <small><strong>📊 Comparison shows both Starting XI and Full Squad (15 players) matches</strong></small>
+                        </div>
+                        
                         ${comparisons.length > 0 ? `
                             <div style="display: grid; gap: 15px;">
                                 ${comparisons.map((comparison, index) => {
-                                    const hasMatches = comparison.topMatches && comparison.topMatches.length > 0;
-                                    const expandId = `expand-${index}`;
+                                    const hasMatches = comparison.allMatches && comparison.allMatches.length > 0;
+                                    const expandId = `expand-league-${index}`;
                                     
                                     return `
                                         <div style="background: white; border-radius: 8px; padding: 15px; border-left: 4px solid #38003c;">
@@ -2093,14 +2127,21 @@
                                                     <div>
                                                         <strong style="color: #38003c;">${comparison.creator}</strong>
                                                         <div style="color: #666; font-size: 0.9rem;">
-                                                            Avg ${comparison.averageMatches} players per team
-                                                            ${hasMatches ? ` | Highest: ${comparison.highestPercentage}%` : ''}
+                                                            Avg XI: ${comparison.averageMatches11} | Avg Squad: ${comparison.averageMatches15} players per team
+                                                            ${hasMatches ? ` | Highest: XI ${comparison.highestPercentage11}%, Squad ${comparison.highestPercentage15}%` : ''}
                                                         </div>
                                                     </div>
                                                 </div>
                                                 <div style="text-align: right;">
-                                                    <div style="font-weight: bold; color: #38003c;">${comparison.totalMatches} total matches</div>
-                                                    <div style="color: #666; font-size: 0.9rem;">${comparison.matchingTeams} teams affected</div>
+                                                    <div style="display: flex; gap: 10px; margin-bottom: 5px;">
+                                                        <span style="background: #38003c; color: white; padding: 3px 8px; border-radius: 12px; font-size: 0.8rem; font-weight: bold;">
+                                                            XI: ${comparison.totalMatches11} matches
+                                                        </span>
+                                                        <span style="background: #007bff; color: white; padding: 3px 8px; border-radius: 12px; font-size: 0.8rem; font-weight: bold;">
+                                                            Squad: ${comparison.totalMatches15} matches
+                                                        </span>
+                                                    </div>
+                                                    <div style="color: #666; font-size: 0.9rem;">${comparison.matchingTeams15} teams affected</div>
                                                 </div>
                                             </div>
                                             
@@ -2117,13 +2158,18 @@
                                                     
                                                     <div style="display: grid; gap: 5px;">
                                                         ${comparison.topMatches.map(match => `
-                                                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 5px 10px; background: #f8f9fa; border-radius: 5px; border-left: 3px solid ${match.percentage >= 80 ? '#28a745' : match.percentage >= 60 ? '#ffc107' : '#6c757d'};">
+                                                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: #f8f9fa; border-radius: 5px; border-left: 3px solid ${match.percentage15 >= 80 ? '#28a745' : match.percentage15 >= 60 ? '#ffc107' : '#6c757d'};">
                                                                 <span style="font-weight: 500; cursor: pointer;" onclick="analyzeTeamById('${match.entryId}')" title="Click to analyze this team">
                                                                     ${match.name}
                                                                 </span>
-                                                                <span style="font-weight: bold; color: ${match.percentage >= 80 ? '#28a745' : match.percentage >= 60 ? '#856404' : '#6c757d'};">
-                                                                    ${match.matches}/11 (${match.percentage}%)
-                                                                </span>
+                                                                <div style="display: flex; gap: 8px;">
+                                                                    <span style="background: #38003c; color: white; padding: 2px 6px; border-radius: 8px; font-size: 0.75rem; font-weight: bold;">
+                                                                        XI: ${match.matches11}/11 (${match.percentage11}%)
+                                                                    </span>
+                                                                    <span style="background: #007bff; color: white; padding: 2px 6px; border-radius: 8px; font-size: 0.75rem; font-weight: bold;">
+                                                                        Squad: ${match.matches15}/15 (${match.percentage15}%)
+                                                                    </span>
+                                                                </div>
                                                             </div>
                                                         `).join('')}
                                                     </div>
@@ -2132,13 +2178,18 @@
                                                         <div id="${expandId}" style="display: none; margin-top: 10px; padding-top: 10px; border-top: 1px solid #eee;">
                                                             <div style="display: grid; gap: 5px;">
                                                                 ${comparison.allMatches.slice(5).map(match => `
-                                                                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 5px 10px; background: #f8f9fa; border-radius: 5px; border-left: 3px solid ${match.percentage >= 80 ? '#28a745' : match.percentage >= 60 ? '#ffc107' : '#6c757d'};">
+                                                                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: #f8f9fa; border-radius: 5px; border-left: 3px solid ${match.percentage15 >= 80 ? '#28a745' : match.percentage15 >= 60 ? '#ffc107' : '#6c757d'};">
                                                                         <span style="font-weight: 500; cursor: pointer;" onclick="analyzeTeamById('${match.entryId}')" title="Click to analyze this team">
                                                                             ${match.name}
                                                                         </span>
-                                                                        <span style="font-weight: bold; color: ${match.percentage >= 80 ? '#28a745' : match.percentage >= 60 ? '#856404' : '#6c757d'};">
-                                                                            ${match.matches}/11 (${match.percentage}%)
-                                                                        </span>
+                                                                        <div style="display: flex; gap: 8px;">
+                                                                            <span style="background: #38003c; color: white; padding: 2px 6px; border-radius: 8px; font-size: 0.75rem; font-weight: bold;">
+                                                                                XI: ${match.matches11}/11 (${match.percentage11}%)
+                                                                            </span>
+                                                                            <span style="background: #007bff; color: white; padding: 2px 6px; border-radius: 8px; font-size: 0.75rem; font-weight: bold;">
+                                                                                Squad: ${match.matches15}/15 (${match.percentage15}%)
+                                                                            </span>
+                                                                        </div>
                                                                     </div>
                                                                 `).join('')}
                                                             </div>
@@ -2160,7 +2211,8 @@
                         
                         <div style="margin-top: 15px; padding: 10px; background: #e9ecef; border-radius: 5px; font-size: 0.9rem; color: #666; text-align: center;">
                             <strong>⚡ Instant Analysis:</strong> Used cached data for ${teamPicksData.length} teams and ${availableCreators.length} creators
-                            <br><small>💡 Click on any team name to analyze that team | Green: 80%+ match, Yellow: 60%+ match</small>
+                            <br><small>💡 Click on any team name to analyze that team</small>
+                            <br><small><strong>Legend:</strong> <span style="color: #38003c;">■ XI = Starting 11</span> | <span style="color: #007bff;">■ Squad = Full 15-player squad</span> | 🟢 80%+ 🟡 60%+ ⚪ <60%</small>
                         </div>
                     </div>
                 `;
@@ -2186,8 +2238,6 @@
                 button.disabled = false;
             }
         }
-
-
 
         // ADD these new helper functions
         function toggleDetails(expandId) {
