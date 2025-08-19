@@ -673,10 +673,12 @@
                     
                     const creatorPicks = await fetchWithProxy(`entry/${creator.id}/event/${currentGameweek}/picks/`);
                     const creatorStarting11 = creatorPicks.picks.filter(pick => pick.multiplier > 0).map(pick => pick.element);
+                    const creatorFullSquad = creatorPicks.picks.map(pick => pick.element); // All 15 players
                     
                     contentCreatorData[creator.id] = {
                         name: creator.name,
                         starting11: creatorStarting11,
+                        fullSquad: creatorFullSquad, // Store all 15 players
                         picks: creatorPicks.picks,
                         lastUpdated: Date.now()
                     };
@@ -690,6 +692,7 @@
                     contentCreatorData[creator.id] = {
                         name: creator.name,
                         starting11: [],
+                        fullSquad: [], // Empty full squad on error
                         picks: [],
                         error: error.message,
                         lastUpdated: Date.now()
@@ -713,7 +716,6 @@
                 updateProxyStatus(`✅ Connected via ${workingProxy.name} - Limited creator data`, 'connected');
             }
         }
-
 
 
         // ADD new function to save creator data to browser cache
@@ -1102,14 +1104,16 @@
         async function compareWithCreators(userPicks) {
             const matches = [];
             const userStarting11 = userPicks.filter(pick => pick.multiplier > 0).map(pick => pick.element);
+            const userFullSquad = userPicks.map(pick => pick.element); // All 15 players
 
             console.log('Comparing with preloaded content creators...');
             console.log('User starting 11 player IDs:', userStarting11);
+            console.log('User full squad (15) player IDs:', userFullSquad);
 
             // If creator data isn't loaded yet, try to load it now
             if (Object.keys(contentCreatorData).length === 0 && !isLoadingCreators) {
                 console.log('Content creator data not preloaded, loading now...');
-                await preloadContentCreatorData();
+                await preloadContentCreatorDataBackground();
             }
 
             for (const creator of contentCreators) {
@@ -1119,9 +1123,12 @@
                     console.warn(`No data available for ${creator.name}`);
                     matches.push({
                         name: creator.name,
-                        matchCount: 0,
-                        totalPlayers: 11,
-                        percentage: 0,
+                        matchCount11: 0,
+                        matchCount15: 0,
+                        totalPlayers11: 11,
+                        totalPlayers15: 15,
+                        percentage11: 0,
+                        percentage15: 0,
                         error: 'Data not available'
                     });
                     continue;
@@ -1131,35 +1138,53 @@
                     console.warn(`Error in preloaded data for ${creator.name}:`, creatorData.error);
                     matches.push({
                         name: creator.name,
-                        matchCount: 0,
-                        totalPlayers: 11,
-                        percentage: 0,
+                        matchCount11: 0,
+                        matchCount15: 0,
+                        totalPlayers11: 11,
+                        totalPlayers15: 15,
+                        percentage11: 0,
+                        percentage15: 0,
                         error: creatorData.error
                     });
                     continue;
                 }
 
                 const creatorStarting11 = creatorData.starting11;
+                const creatorFullSquad = creatorData.fullSquad || creatorData.picks.map(pick => pick.element);
+                
                 console.log(`${creator.name} starting 11:`, creatorStarting11);
+                console.log(`${creator.name} full squad:`, creatorFullSquad);
 
-                const commonPlayers = creatorStarting11.filter(player => userStarting11.includes(player));
-                const matchCount = commonPlayers.length;
+                // Compare starting 11
+                const commonPlayers11 = creatorStarting11.filter(player => userStarting11.includes(player));
+                const matchCount11 = commonPlayers11.length;
 
-                console.log(`${creator.name} - Common players: ${commonPlayers.length}`, commonPlayers);
+                // Compare full squads (15 players)
+                const commonPlayers15 = creatorFullSquad.filter(player => userFullSquad.includes(player));
+                const matchCount15 = commonPlayers15.length;
+
+                console.log(`${creator.name} - Starting 11 matches: ${matchCount11}, Full squad matches: ${matchCount15}`);
 
                 matches.push({
                     name: creator.name,
-                    matchCount,
-                    totalPlayers: 11,
-                    percentage: Math.round((matchCount / 11) * 100),
-                    commonPlayers: commonPlayers
+                    matchCount11,
+                    matchCount15,
+                    totalPlayers11: 11,
+                    totalPlayers15: 15,
+                    percentage11: Math.round((matchCount11 / 11) * 100),
+                    percentage15: Math.round((matchCount15 / 15) * 100),
+                    commonPlayers11: commonPlayers11,
+                    commonPlayers15: commonPlayers15
                 });
             }
 
-            // Sort by match count, then by name for consistent ordering
+            // Sort by 15-player match percentage first, then by 11-player match
             const sortedMatches = matches.sort((a, b) => {
-                if (b.matchCount !== a.matchCount) {
-                    return b.matchCount - a.matchCount;
+                if (b.percentage15 !== a.percentage15) {
+                    return b.percentage15 - a.percentage15;
+                }
+                if (b.percentage11 !== a.percentage11) {
+                    return b.percentage11 - a.percentage11;
                 }
                 return a.name.localeCompare(b.name);
             });
@@ -1167,7 +1192,6 @@
             console.log('Final comparison results:', sortedMatches);
             return sortedMatches;
         }
-
 
 
 
@@ -1230,17 +1254,29 @@
                     ${creatorMatches.length > 0 ? `
                         <div style="background: #fff3cd; border: 1px solid #ffeeba; border-radius: 10px; padding: 20px; margin: 20px 0;">
                             <h4 style="color: #856404; margin-bottom: 15px;">🎯 Content Creator Matches</h4>
+                            <div style="margin-bottom: 15px; padding: 10px; background: #e9ecef; border-radius: 5px; text-align: center;">
+                                <small><strong>📊 Comparison shows both Starting XI and Full Squad (15 players) matches</strong></small>
+                            </div>
                             ${creatorMatches.map(match => `
-                                <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: white; border-radius: 8px; margin-bottom: 10px; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);">
+                                <div style="display: flex; justify-content: space-between; align-items: center; padding: 15px; background: white; border-radius: 8px; margin-bottom: 10px; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);">
                                     <div style="flex: 1;">
                                         <span style="font-weight: bold; color: #38003c;">${match.name}</span>
                                         ${match.error ? `<div style="color: #dc3545; font-size: 0.8rem;">Error: ${match.error}</div>` : ''}
                                     </div>
-                                    <span style="background: ${match.matchCount > 0 ? '#38003c' : '#6c757d'}; color: white; padding: 5px 10px; border-radius: 15px; font-weight: bold;">${match.matchCount}/11 (${match.percentage}%)</span>
+                                    <div style="display: flex; gap: 10px;">
+                                        <span style="background: ${match.matchCount11 > 0 ? '#38003c' : '#6c757d'}; color: white; padding: 5px 10px; border-radius: 15px; font-weight: bold; font-size: 0.9rem;">
+                                            XI: ${match.matchCount11}/11 (${match.percentage11}%)
+                                        </span>
+                                        <span style="background: ${match.matchCount15 > 0 ? '#007bff' : '#6c757d'}; color: white; padding: 5px 10px; border-radius: 15px; font-weight: bold; font-size: 0.9rem;">
+                                            Squad: ${match.matchCount15}/15 (${match.percentage15}%)
+                                        </span>
+                                    </div>
                                 </div>
                             `).join('')}
                             <div style="margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 5px; font-size: 0.9rem; color: #666;">
-                                <strong>Debug Info:</strong> Compared with ${creatorMatches.length} content creators. Check browser console for detailed logs.
+                                <strong>Legend:</strong> 
+                                <span style="color: #38003c;">■ XI = Starting 11 comparison</span> | 
+                                <span style="color: #007bff;">■ Squad = Full 15-player squad comparison</span>
                             </div>
                         </div>
                     ` : `
@@ -1250,6 +1286,7 @@
                         </div>
                     `}
 
+                    <!-- Rest of the team analysis HTML stays the same -->
                     <div style="background: #f8f9fa; border-radius: 10px; padding: 20px; margin: 20px 0;">
                         <h4>⚽ Current Team Squad (GW${currentGameweek})</h4>
                         
@@ -1371,6 +1408,8 @@
             document.getElementById('results').innerHTML = html;
             hideLoading();
         }
+
+
 
         // Calculate interesting team facts
         function calculateTeamFacts(picksData, historyData, teamData) {
@@ -1557,7 +1596,8 @@
                             // Cache the team picks data for later use in creator comparison
                             cachedLeagueTeamData[team.entry] = {
                                 picks: currentPicks.picks,
-                                starting11: currentPicks.picks.filter(pick => pick.multiplier > 0).map(pick => pick.element)
+                                starting11: currentPicks.picks.filter(pick => pick.multiplier > 0).map(pick => pick.element),
+                                fullSquad: currentPicks.picks.map(pick => pick.element) // All 15 players
                             };
 
                             // Cache team names for display
