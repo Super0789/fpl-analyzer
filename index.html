@@ -1,0 +1,1968 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FPL Analyzer - Fixed Version</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(45deg, #38003c, #00ff87);
+            color: white;
+            text-align: center;
+            padding: 40px 20px;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-left: 10px;
+            background: #ffc107;
+        }
+
+        .status-indicator.connected {
+            background: #28a745;
+            animation: pulse 2s infinite;
+        }
+
+        .status-indicator.error {
+            background: #dc3545;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .proxy-status {
+            background: #e3f2fd;
+            border: 1px solid #90caf9;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px;
+            text-align: center;
+        }
+
+        .navigation {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            padding: 30px;
+            background: #f8f9fa;
+        }
+
+        .nav-button {
+            padding: 15px 30px;
+            background: linear-gradient(45deg, #38003c, #764ba2);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .nav-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .nav-button.active {
+            background: linear-gradient(45deg, #00ff87, #38003c);
+        }
+
+        .content {
+            padding: 30px;
+            min-height: 500px;
+        }
+
+        .input-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border-left: 5px solid #38003c;
+        }
+
+        .input-section h3 {
+            margin-bottom: 15px;
+            color: #38003c;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        input {
+            padding: 12px 15px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 1rem;
+            flex: 1;
+            min-width: 200px;
+        }
+
+        input:focus {
+            border-color: #38003c;
+            outline: none;
+        }
+
+        .analyze-button {
+            padding: 12px 25px;
+            background: #38003c;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        .analyze-button:hover {
+            background: #4a0048;
+        }
+
+        .analyze-button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #38003c;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .progress-step {
+            margin: 10px 0;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            border-left: 4px solid #38003c;
+        }
+
+        .progress-step.completed {
+            background: #d4edda;
+            border-left-color: #28a745;
+        }
+
+        .progress-step.error {
+            background: #f8d7da;
+            border-left-color: #dc3545;
+        }
+
+        .results {
+            display: none;
+        }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-card h4 {
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .stat-description {
+            opacity: 0.8;
+            font-size: 0.9rem;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border: 1px solid #f5c6cb;
+        }
+
+        .demo-section {
+            background: #fff3cd;
+            border: 1px solid #ffeeba;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .demo-button {
+            background: #ffc107;
+            color: #212529;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+            font-weight: bold;
+        }
+
+        .demo-button:hover {
+            background: #e0a800;
+        }
+
+        @media (max-width: 768px) {
+            .navigation {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .nav-button {
+                width: 200px;
+            }
+
+            .input-group {
+                flex-direction: column;
+            }
+
+            .input-group input, 
+            .input-group button {
+                width: 100%;
+            }
+
+            .stat-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏆 FPL Analyzer</h1>
+            <p>Enhanced Version with League Insights</p>
+            <div class="status-indicator" id="connectionStatus"></div>
+        </div>
+
+        <div class="proxy-status" id="proxyStatus">
+            <strong>🔄 Testing proxy connections...</strong>
+            <div id="proxyResults"></div>
+        </div>
+
+        <div class="demo-section">
+            <h4>🎯 Quick Demo</h4>
+            <p>Try these working FPL team IDs to test the analyzer:</p>
+            <button class="demo-button" onclick="loadDemo(33231)">FPL Goat (33231)</button>
+            <button class="demo-button" onclick="loadDemo(8142)">Andy FPLMode (8142)</button>
+            <button class="demo-button" onclick="loadDemo(190)">FPL Fran (190)</button>
+            <button class="demo-button" onclick="loadDemo(1587)">FPL Raptor (1587)</button>
+        </div>
+
+        <div class="navigation">
+            <button class="nav-button active" onclick="showTeamAnalyzer()">Team Analyzer</button>
+            <button class="nav-button" onclick="showLeagueAnalyzer()">Mini League Analyzer</button>
+        </div>
+
+        <div class="content">
+            <!-- Team Analyzer -->
+            <div id="teamAnalyzer">
+                <div class="input-section">
+                    <h3>🔍 Analyze Team</h3>
+                    <div class="input-group">
+                        <input type="number" id="teamId" placeholder="Enter FPL Team ID (e.g., 33231)" min="1">
+                        <button class="analyze-button" id="analyzeTeamBtn" onclick="analyzeTeam()">Analyze Team</button>
+                    </div>
+                    <p style="margin-top: 10px; color: #666; font-size: 0.9rem;">
+                        💡 Find the team ID in the URL: fantasy.premierleague.com/entry/<strong>TEAM_ID</strong>/event/1
+                    </p>
+                </div>
+            </div>
+
+            <!-- League Analyzer -->
+            <div id="leagueAnalyzer" style="display: none;">
+                <div class="input-section">
+                    <h3>🏅 Analyze Mini League</h3>
+                    <div class="input-group">
+                        <input type="number" id="leagueId" placeholder="Enter Mini League ID" min="1">
+                        <select id="leagueSize" onchange="updateLeagueSize()" style="padding: 12px 15px; border: 2px solid #ddd; border-radius: 8px; font-size: 1rem;">
+                            <option value="10">Top 10 teams</option>
+                            <option value="15" selected>Top 15 teams</option>
+                            <option value="25">Top 25 teams</option>
+                            <option value="50">Top 50 teams</option>
+                            <option value="100">Top 100 teams</option>
+                            <option value="custom">Custom size</option>
+                        </select>
+                        <input type="number" id="customLeagueSize" placeholder="Custom size" min="1" max="200" style="display: none; padding: 12px 15px; border: 2px solid #ddd; border-radius: 8px; font-size: 1rem; width: 120px;">
+                        <button class="analyze-button" id="analyzeLeagueBtn" onclick="analyzeLeague()">Analyze League</button>
+                    </div>
+                    <p style="margin-top: 10px; color: #666; font-size: 0.9rem;">
+                        💡 Find the league ID in the URL when viewing your mini league standings<br>
+                        ⚠️ Larger sizes take longer to process due to API limits
+                    </p>
+                </div>
+            </div>
+
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p id="loadingText">Analyzing data from FPL API...</p>
+                <div id="progressSteps"></div>
+            </div>
+
+            <div class="results" id="results"></div>
+        </div>
+    </div>
+
+    <script>
+        // Content creators database
+        const contentCreators = [
+            { id: 33231, name: "FPL Goat" },
+            { id: 8142, name: "Andy (FPLMode)" },
+            { id: 190, name: "FPL Fran" },
+            { id: 1587, name: "Ross (FPL Raptor)" },
+            { id: 6586, name: "Ben Crellin (FF Hub)" },
+            { id: 200, name: "FPL Focal" },
+            { id: 44, name: "Lets Talk FPL" },
+            { id: 1320, name: "FPL Harry" },
+            { id: 14501, name: "FPL Pickle" },
+            { id: 963, name: "BigMan Bakar" },
+            { id: 16267, name: "FPL Mate" }
+        ];
+
+        // Enhanced proxy configuration
+        const proxyServices = [
+            {
+                name: 'AllOrigins',
+                url: 'https://api.allorigins.win/get?url=',
+                handler: async (url) => {
+                    const response = await fetch(url);
+                    const data = await response.json();
+                    return JSON.parse(data.contents);
+                },
+                active: false
+            },
+            {
+                name: 'ThingProxy',
+                url: 'https://thingproxy.freeboard.io/fetch/',
+                handler: async (url) => {
+                    const response = await fetch(url);
+                    return await response.json();
+                },
+                active: false
+            },
+            {
+                name: 'CorsProxy',
+                url: 'https://corsproxy.io/?',
+                handler: async (url) => {
+                    const response = await fetch(url);
+                    return await response.json();
+                },
+                active: false
+            }
+        ];
+
+        // Global variables
+        let currentGameweek = 1;
+        let playersData = {};
+        let teamsData = {};
+        let workingProxy = null;
+        let contentCreatorData = {}; // Store preloaded creator data
+        let isLoadingCreators = false;
+        let cachedLeagueTeamData = {}; // Store league team picks data
+        let cachedTeamNames = {}; // Store team names for display
+
+        // Test proxy services
+        async function testProxyServices() {
+            updateProxyStatus('🔄 Testing proxy services...');
+            
+            const testUrl = 'https://fantasy.premierleague.com/api/bootstrap-static/';
+            
+            // Test proxies one by one and stop at first working one
+            for (const proxy of proxyServices) {
+                try {
+                    updateProxyStatus(`Testing ${proxy.name}...`);
+                    
+                    const proxyUrl = proxy.url + encodeURIComponent(testUrl);
+                    const timeoutPromise = new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('Timeout')), 6000) // Reduced timeout
+                    );
+                    
+                    const fetchPromise = proxy.handler(proxyUrl);
+                    const data = await Promise.race([fetchPromise, timeoutPromise]);
+                    
+                    if (data && data.elements && data.elements.length > 0) {
+                        proxy.active = true;
+                        workingProxy = proxy;
+                        console.log(`${proxy.name} proxy working successfully`);
+                        
+                        // Success - stop testing other proxies
+                        updateProxyStatus(`✅ Connected via ${workingProxy.name}`, 'connected');
+                        document.getElementById('connectionStatus').className = 'status-indicator connected';
+                        document.getElementById('proxyResults').innerHTML = `✅ ${proxy.name} - Working`;
+                        enableButtons();
+                        
+                        // Start preloading creator data in background (don't wait for it)
+                        preloadContentCreatorDataBackground();
+                        return;
+                    }
+                } catch (error) {
+                    console.warn(`${proxy.name} proxy failed:`, error);
+                }
+            }
+
+            // If we get here, all proxies failed
+            updateProxyStatus('❌ All proxy services failed. Please try again later.', 'error');
+            document.getElementById('connectionStatus').className = 'status-indicator error';
+            document.getElementById('proxyResults').innerHTML = '❌ All proxy services failed';
+            showFallbackOptions();
+        }
+
+
+
+
+        async function testProxyServices() {
+            updateProxyStatus('🔄 Testing proxy services...');
+            
+            const testUrl = 'https://fantasy.premierleague.com/api/bootstrap-static/';
+            
+            // Test proxies one by one and stop at first working one
+            for (const proxy of proxyServices) {
+                try {
+                    updateProxyStatus(`Testing ${proxy.name}...`);
+                    
+                    const proxyUrl = proxy.url + encodeURIComponent(testUrl);
+                    const timeoutPromise = new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('Timeout')), 6000) // Reduced timeout
+                    );
+                    
+                    const fetchPromise = proxy.handler(proxyUrl);
+                    const data = await Promise.race([fetchPromise, timeoutPromise]);
+                    
+                    if (data && data.elements && data.elements.length > 0) {
+                        proxy.active = true;
+                        workingProxy = proxy;
+                        console.log(`${proxy.name} proxy working successfully`);
+                        
+                        // Success - stop testing other proxies
+                        updateProxyStatus(`✅ Connected via ${workingProxy.name}`, 'connected');
+                        document.getElementById('connectionStatus').className = 'status-indicator connected';
+                        document.getElementById('proxyResults').innerHTML = `✅ ${proxy.name} - Working`;
+                        enableButtons();
+                        
+                        // Start preloading creator data in background (don't wait for it)
+                        preloadContentCreatorDataBackground();
+                        return;
+                    }
+                } catch (error) {
+                    console.warn(`${proxy.name} proxy failed:`, error);
+                }
+            }
+
+            // If we get here, all proxies failed
+            updateProxyStatus('❌ All proxy services failed. Please try again later.', 'error');
+            document.getElementById('connectionStatus').className = 'status-indicator error';
+            document.getElementById('proxyResults').innerHTML = '❌ All proxy services failed';
+            showFallbackOptions();
+        }
+
+        // REPLACE the existing preloadContentCreatorData function with this background version
+        async function preloadContentCreatorDataBackground() {
+            if (isLoadingCreators) return;
+            isLoadingCreators = true;
+            
+            console.log('🎬 Starting background preload of content creator data...');
+            
+            // Don't update UI status - let it show as just "Connected"
+            const loadedCreators = [];
+            const failedCreators = [];
+            
+            for (const creator of contentCreators) {
+                try {
+                    // Smaller delay for background loading
+                    if (loadedCreators.length > 0) {
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                    }
+                    
+                    const creatorPicks = await fetchWithProxy(`entry/${creator.id}/event/${currentGameweek}/picks/`);
+                    const creatorStarting11 = creatorPicks.picks.filter(pick => pick.multiplier > 0).map(pick => pick.element);
+                    
+                    contentCreatorData[creator.id] = {
+                        name: creator.name,
+                        starting11: creatorStarting11,
+                        picks: creatorPicks.picks,
+                        lastUpdated: Date.now()
+                    };
+                    
+                    loadedCreators.push(creator.name);
+                    console.log(`✅ Background loaded ${creator.name}`);
+                    
+                } catch (error) {
+                    console.warn(`❌ Failed to background load ${creator.name}:`, error);
+                    failedCreators.push(creator.name);
+                    contentCreatorData[creator.id] = {
+                        name: creator.name,
+                        starting11: [],
+                        picks: [],
+                        error: error.message,
+                        lastUpdated: Date.now()
+                    };
+                }
+            }
+            
+            isLoadingCreators = false;
+            console.log(`🎉 Background loading complete: ${loadedCreators.length} loaded, ${failedCreators.length} failed`);
+            
+            // Only show failed creators if more than half failed
+            if (failedCreators.length > loadedCreators.length) {
+                console.warn('⚠️ Most content creators failed to load:', failedCreators);
+            }
+        }
+
+        // ADD this new function to handle the league size selection
+        function updateLeagueSize() {
+            const leagueSize = document.getElementById('leagueSize').value;
+            const customInput = document.getElementById('customLeagueSize');
+            
+            if (leagueSize === 'custom') {
+                customInput.style.display = 'inline-block';
+                customInput.focus();
+            } else {
+                customInput.style.display = 'none';
+            }
+        }
+
+        // ADD this new function to get the selected league size
+        function getSelectedLeagueSize() {
+            const leagueSize = document.getElementById('leagueSize').value;
+            
+            if (leagueSize === 'custom') {
+                const customSize = parseInt(document.getElementById('customLeagueSize').value);
+                return isNaN(customSize) || customSize < 1 ? 15 : Math.min(customSize, 200); // Max 200 for safety
+            }
+            
+            return parseInt(leagueSize);
+        }
+
+
+
+
+        function updateProxyStatus(message, type = 'testing') {
+            const statusEl = document.getElementById('proxyStatus');
+            statusEl.innerHTML = `<strong>${message}</strong><div id="proxyResults"></div>`;
+            
+            if (type === 'connected') {
+                statusEl.style.background = '#d4edda';
+                statusEl.style.borderColor = '#c3e6cb';
+                statusEl.style.color = '#155724';
+            } else if (type === 'error') {
+                statusEl.style.background = '#f8d7da';
+                statusEl.style.borderColor = '#f5c6cb';
+                statusEl.style.color = '#721c24';
+            }
+        }
+
+        function enableButtons() {
+            document.getElementById('analyzeTeamBtn').disabled = false;
+            document.getElementById('analyzeLeagueBtn').disabled = false;
+        }
+
+        function showFallbackOptions() {
+            document.getElementById('results').innerHTML = `
+                <div class="error">
+                    <h3>🚫 Connection Failed</h3>
+                    <p><strong>All proxy services are currently unavailable.</strong></p>
+                    
+                    <h4>Alternative Solutions:</h4>
+                    <ol>
+                        <li><strong>Browser Extension:</strong> Install a CORS browser extension like "CORS Unblock" and refresh this page</li>
+                        <li><strong>Try Later:</strong> Proxy services may be temporarily down - try again in a few minutes</li>
+                    </ol>
+                </div>
+            `;
+            document.getElementById('results').style.display = 'block';
+        }
+
+        // Enhanced fetch function
+        async function fetchWithProxy(url) {
+            if (!workingProxy) {
+                throw new Error('No working proxy available');
+            }
+
+            const baseUrl = 'https://fantasy.premierleague.com/api/';
+            const fullUrl = url.startsWith('http') ? url : baseUrl + url;
+            
+            try {
+                const proxyUrl = workingProxy.url + encodeURIComponent(fullUrl);
+                return await workingProxy.handler(proxyUrl);
+            } catch (error) {
+                console.error(`${workingProxy.name} proxy failed:`, error);
+                throw new Error(`Proxy request failed: ${error.message}`);
+            }
+        }
+
+        // Progress tracking
+        function addProgressStep(message, status = 'pending') {
+            const stepsDiv = document.getElementById('progressSteps');
+            const stepDiv = document.createElement('div');
+            stepDiv.className = `progress-step ${status}`;
+            stepDiv.textContent = message;
+            stepDiv.id = `step-${Date.now()}`;
+            stepsDiv.appendChild(stepDiv);
+            return stepDiv.id;
+        }
+
+        function updateProgressStep(stepId, message, status) {
+            const stepEl = document.getElementById(stepId);
+            if (stepEl) {
+                stepEl.textContent = message;
+                stepEl.className = `progress-step ${status}`;
+            }
+        }
+
+        // Demo function
+        function loadDemo(teamId) {
+            document.getElementById('teamId').value = teamId;
+            showTeamAnalyzer();
+            analyzeTeam();
+        }
+
+        // Navigation functions
+        function showTeamAnalyzer() {
+            document.getElementById('teamAnalyzer').style.display = 'block';
+            document.getElementById('leagueAnalyzer').style.display = 'none';
+            document.querySelectorAll('.nav-button')[0].classList.add('active');
+            document.querySelectorAll('.nav-button')[1].classList.remove('active');
+            clearResults();
+        }
+
+        function showLeagueAnalyzer() {
+            document.getElementById('teamAnalyzer').style.display = 'none';
+            document.getElementById('leagueAnalyzer').style.display = 'block';
+            document.querySelectorAll('.nav-button')[0].classList.remove('active');
+            document.querySelectorAll('.nav-button')[1].classList.add('active');
+            clearResults();
+        }
+
+        function clearResults() {
+            document.getElementById('results').innerHTML = '';
+            document.getElementById('results').style.display = 'none';
+            document.getElementById('progressSteps').innerHTML = '';
+        }
+
+        function showLoading() {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('results').style.display = 'none';
+            document.getElementById('progressSteps').innerHTML = '';
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('results').style.display = 'block';
+        }
+
+        function showError(message) {
+            document.getElementById('results').innerHTML = `
+                <div class="error">
+                    <strong>Error:</strong> ${message}<br><br>
+                    <strong>What you can try:</strong>
+                    <ul>
+                        <li>Check if the team/league ID is correct</li>
+                        <li>Refresh the page to reconnect to proxy services</li>
+                        <li>Try again in a few minutes</li>
+                    </ul>
+                </div>
+            `;
+            hideLoading();
+        }
+
+        // Initialize data
+        async function initializeData() {
+            if (Object.keys(playersData).length > 0) {
+                return;
+            }
+
+            const stepId = addProgressStep('Fetching FPL game data...', 'pending');
+            
+            try {
+                const gameweekData = await fetchWithProxy('bootstrap-static/');
+                updateProgressStep(stepId, 'FPL game data loaded successfully', 'completed');
+                
+                const currentEvent = gameweekData.events.find(event => event.is_current) || 
+                                   gameweekData.events.find(event => event.is_next) ||
+                                   gameweekData.events[0];
+                currentGameweek = currentEvent ? currentEvent.id : 1;
+
+                playersData = gameweekData.elements.reduce((acc, player) => {
+                    acc[player.id] = player;
+                    return acc;
+                }, {});
+
+                teamsData = gameweekData.teams.reduce((acc, team) => {
+                    acc[team.id] = team;
+                    return acc;
+                }, {});
+
+                console.log(`Initialized with ${Object.keys(playersData).length} players and ${Object.keys(teamsData).length} teams`);
+                addProgressStep(`Game data: ${Object.keys(playersData).length} players, ${Object.keys(teamsData).length} teams, GW${currentGameweek}`, 'completed');
+
+            } catch (error) {
+                updateProgressStep(stepId, `Failed to load game data: ${error.message}`, 'error');
+                throw error;
+            }
+        }
+
+        // Team analysis function
+        async function analyzeTeam() {
+            const teamId = document.getElementById('teamId').value;
+            if (!teamId) {
+                alert('Please enter a team ID');
+                return;
+            }
+
+            if (!workingProxy) {
+                alert('No proxy connection available. Please wait for connection or refresh the page.');
+                return;
+            }
+
+            showLoading();
+            document.getElementById('loadingText').textContent = `Analyzing team ${teamId}...`;
+
+            try {
+                await initializeData();
+
+                const stepId1 = addProgressStep(`Fetching team data for ${teamId}...`, 'pending');
+                const teamData = await fetchWithProxy(`entry/${teamId}/`);
+                updateProgressStep(stepId1, `Team data loaded: ${teamData.player_first_name} ${teamData.player_last_name}`, 'completed');
+
+                const stepId2 = addProgressStep(`Fetching team picks for GW${currentGameweek}...`, 'pending');
+                const picksData = await fetchWithProxy(`entry/${teamId}/event/${currentGameweek}/picks/`);
+                updateProgressStep(stepId2, `Team picks loaded: ${picksData.picks.length} players`, 'completed');
+
+                const stepId3 = addProgressStep('Fetching team history...', 'pending');
+                let historyData = null;
+                try {
+                    historyData = await fetchWithProxy(`entry/${teamId}/history/`);
+                    updateProgressStep(stepId3, 'Team history loaded', 'completed');
+                } catch (historyError) {
+                    updateProgressStep(stepId3, 'History data unavailable (optional)', 'completed');
+                }
+
+                const stepId4 = addProgressStep('Comparing with content creators...', 'pending');
+                const creatorMatches = await compareWithCreators(picksData.picks);
+                updateProgressStep(stepId4, `Compared with ${creatorMatches.length} content creators`, 'completed');
+
+                generateTeamAnalysis(teamData, picksData, historyData, creatorMatches);
+
+            } catch (error) {
+                console.error('Team analysis error:', error);
+                showError(error.message);
+            }
+        }
+
+        // Content creator comparison
+        async function compareWithCreators(userPicks) {
+            const matches = [];
+            const userStarting11 = userPicks.filter(pick => pick.multiplier > 0).map(pick => pick.element);
+
+            console.log('Comparing with preloaded content creators...');
+            console.log('User starting 11 player IDs:', userStarting11);
+
+            // If creator data isn't loaded yet, try to load it now
+            if (Object.keys(contentCreatorData).length === 0 && !isLoadingCreators) {
+                console.log('Content creator data not preloaded, loading now...');
+                await preloadContentCreatorData();
+            }
+
+            for (const creator of contentCreators) {
+                const creatorData = contentCreatorData[creator.id];
+                
+                if (!creatorData) {
+                    console.warn(`No data available for ${creator.name}`);
+                    matches.push({
+                        name: creator.name,
+                        matchCount: 0,
+                        totalPlayers: 11,
+                        percentage: 0,
+                        error: 'Data not available'
+                    });
+                    continue;
+                }
+
+                if (creatorData.error) {
+                    console.warn(`Error in preloaded data for ${creator.name}:`, creatorData.error);
+                    matches.push({
+                        name: creator.name,
+                        matchCount: 0,
+                        totalPlayers: 11,
+                        percentage: 0,
+                        error: creatorData.error
+                    });
+                    continue;
+                }
+
+                const creatorStarting11 = creatorData.starting11;
+                console.log(`${creator.name} starting 11:`, creatorStarting11);
+
+                const commonPlayers = creatorStarting11.filter(player => userStarting11.includes(player));
+                const matchCount = commonPlayers.length;
+
+                console.log(`${creator.name} - Common players: ${commonPlayers.length}`, commonPlayers);
+
+                matches.push({
+                    name: creator.name,
+                    matchCount,
+                    totalPlayers: 11,
+                    percentage: Math.round((matchCount / 11) * 100),
+                    commonPlayers: commonPlayers
+                });
+            }
+
+            // Sort by match count, then by name for consistent ordering
+            const sortedMatches = matches.sort((a, b) => {
+                if (b.matchCount !== a.matchCount) {
+                    return b.matchCount - a.matchCount;
+                }
+                return a.name.localeCompare(b.name);
+            });
+
+            console.log('Final comparison results:', sortedMatches);
+            return sortedMatches;
+        }
+
+
+
+
+        // Generate team analysis with interesting facts
+        function generateTeamAnalysis(teamData, picksData, historyData, creatorMatches) {
+            const captain = picksData.picks.find(pick => pick.is_captain);
+            const captainPlayer = captain ? playersData[captain.element] : null;
+            const viceCaptain = picksData.picks.find(pick => pick.is_vice_captain);
+            const viceCaptainPlayer = viceCaptain ? playersData[viceCaptain.element] : null;
+
+            // Calculate team value
+            const teamValue = picksData.picks.reduce((total, pick) => {
+                return total + (playersData[pick.element]?.now_cost || 0);
+            }, 0) / 10;
+
+            // Calculate interesting team facts
+            const teamFacts = calculateTeamFacts(picksData, historyData, teamData);
+
+            const html = `
+                <div style="margin: 30px 0; padding: 20px; background: white; border-radius: 10px; box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);">
+                    <h3 style="color: #38003c; margin-bottom: 20px; border-bottom: 2px solid #38003c; padding-bottom: 10px;">
+                        👤 ${teamData.player_first_name} ${teamData.player_last_name}
+                    </h3>
+                    
+                    <div class="stat-grid">
+                        <div class="stat-card">
+                            <h4>Overall Rank</h4>
+                            <div class="stat-value">${teamData.summary_overall_rank?.toLocaleString() || 'N/A'}</div>
+                            <div class="stat-description">current rank</div>
+                        </div>
+                        
+                        <div class="stat-card">
+                            <h4>Total Points</h4>
+                            <div class="stat-value">${teamData.summary_overall_points || 0}</div>
+                            <div class="stat-description">points this season</div>
+                        </div>
+                        
+                        <div class="stat-card">
+                            <h4>Team Value</h4>
+                            <div class="stat-value">£${teamValue.toFixed(1)}m</div>
+                            <div class="stat-description">current squad value</div>
+                        </div>
+                        
+                        <div class="stat-card">
+                            <h4>Bank Balance</h4>
+                            <div class="stat-value">£${(picksData.entry_history?.bank || 0) / 10}m</div>
+                            <div class="stat-description">money in the bank</div>
+                        </div>
+                    </div>
+
+                    <!-- Interesting Team Facts -->
+                    <div style="margin: 30px 0; background: #f8f9fa; border-radius: 10px; padding: 20px;">
+                        <h3 style="color: #38003c; margin-bottom: 20px; text-align: center;">🎯 Interesting Team Facts</h3>
+                        
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px;">
+                            ${generateTeamFactCards(teamFacts)}
+                        </div>
+                    </div>
+
+                    ${creatorMatches.length > 0 ? `
+                        <div style="background: #fff3cd; border: 1px solid #ffeeba; border-radius: 10px; padding: 20px; margin: 20px 0;">
+                            <h4 style="color: #856404; margin-bottom: 15px;">🎯 Content Creator Matches</h4>
+                            ${creatorMatches.map(match => `
+                                <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: white; border-radius: 8px; margin-bottom: 10px; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);">
+                                    <div style="flex: 1;">
+                                        <span style="font-weight: bold; color: #38003c;">${match.name}</span>
+                                        ${match.error ? `<div style="color: #dc3545; font-size: 0.8rem;">Error: ${match.error}</div>` : ''}
+                                    </div>
+                                    <span style="background: ${match.matchCount > 0 ? '#38003c' : '#6c757d'}; color: white; padding: 5px 10px; border-radius: 15px; font-weight: bold;">${match.matchCount}/11 (${match.percentage}%)</span>
+                                </div>
+                            `).join('')}
+                            <div style="margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 5px; font-size: 0.9rem; color: #666;">
+                                <strong>Debug Info:</strong> Compared with ${creatorMatches.length} content creators. Check browser console for detailed logs.
+                            </div>
+                        </div>
+                    ` : `
+                        <div style="background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 10px; padding: 20px; margin: 20px 0;">
+                            <h4 style="color: #721c24; margin-bottom: 15px;">🎯 Content Creator Matches</h4>
+                            <p style="color: #721c24;">No content creator data could be loaded. Check the console for errors.</p>
+                        </div>
+                    `}
+
+                    <div style="background: #f8f9fa; border-radius: 10px; padding: 20px; margin: 20px 0;">
+                        <h4>⚽ Current Team Squad (GW${currentGameweek})</h4>
+                        
+                        <div style="margin: 15px 0; padding: 15px; background: #e3f2fd; border-radius: 8px;">
+                            <h5 style="margin-bottom: 10px; color: #1976d2;">Team Leadership:</h5>
+                            <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                                <div style="background: white; padding: 10px; border-radius: 8px; border: 2px solid #ffc107;">
+                                    <strong style="color: #856404;">Captain: ${captainPlayer ? captainPlayer.web_name : 'N/A'}</strong>
+                                    <div style="color: #666; font-size: 0.9rem;">${captainPlayer ? teamsData[captainPlayer.team]?.short_name + ' - £' + (captainPlayer.now_cost / 10).toFixed(1) + 'm' : ''}</div>
+                                </div>
+                                <div style="background: white; padding: 10px; border-radius: 8px; border: 2px solid #6c757d;">
+                                    <strong style="color: #495057;">Vice Captain: ${viceCaptainPlayer ? viceCaptainPlayer.web_name : 'N/A'}</strong>
+                                    <div style="color: #666; font-size: 0.9rem;">${viceCaptainPlayer ? teamsData[viceCaptainPlayer.team]?.short_name + ' - £' + (viceCaptainPlayer.now_cost / 10).toFixed(1) + 'm' : ''}</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div style="margin-top: 15px;">
+                            <h5 style="margin-bottom: 10px;">Starting XI:</h5>
+                            <div style="display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+                                ${picksData.picks.filter(pick => pick.multiplier > 0).map(pick => {
+                                    const player = playersData[pick.element];
+                                    const isStarPlayer = player && player.total_points > 80;
+                                    const borderColor = pick.is_captain ? '#ffc107' : pick.is_vice_captain ? '#6c757d' : '#38003c';
+                                    
+                                    return `
+                                        <div style="background: white; border: 2px solid ${borderColor}; border-radius: 8px; padding: 8px 12px; text-align: center; ${isStarPlayer ? 'box-shadow: 0 0 10px rgba(255, 193, 7, 0.3);' : ''}">
+                                            <div style="font-weight: bold; color: #38003c;">
+                                                ${pick.is_captain ? '(C) ' : ''}
+                                                ${pick.is_vice_captain ? '(V) ' : ''}
+                                                ${player ? player.web_name : 'Unknown'}
+                                                ${isStarPlayer ? ' ⭐' : ''}
+                                            </div>
+                                            <div style="color: #666; font-size: 0.8rem;">
+                                                ${player ? teamsData[player.team]?.short_name : ''} - £${player ? (player.now_cost / 10).toFixed(1) : '0.0'}m
+                                            </div>
+                                            <div style="color: #28a745; font-size: 0.8rem; font-weight: bold;">
+                                                ${player ? player.total_points : 0} pts
+                                            </div>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                            
+                            <h5 style="margin: 20px 0 10px 0;">Bench:</h5>
+                            <div style="display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
+                                ${picksData.picks.filter(pick => pick.multiplier === 0).map(pick => {
+                                    const player = playersData[pick.element];
+                                    return `
+                                        <div style="background: #e9ecef; border: 1px solid #ddd; border-radius: 8px; padding: 8px 12px; text-align: center;">
+                                            <div style="font-weight: bold;">${player ? player.web_name : 'Unknown'}</div>
+                                            <div style="color: #666; font-size: 0.8rem;">
+                                                ${player ? teamsData[player.team]?.short_name : ''} - £${player ? (player.now_cost / 10).toFixed(1) : '0.0'}m
+                                            </div>
+                                            <div style="color: #6c757d; font-size: 0.8rem;">
+                                                ${player ? player.total_points : 0} pts
+                                            </div>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 30px;">
+                        <h4>📈 Squad Analysis</h4>
+                        <div style="display: grid; gap: 15px; margin-top: 15px;">
+                            ${getTopPerformers(picksData.picks).slice(0, 5).map((player, index) => `
+                                <div style="display: flex; justify-content: space-between; align-items: center; padding: 15px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #38003c;">
+                                    <div style="display: flex; align-items: center;">
+                                        <div style="background: #38003c; color: white; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; margin-right: 15px;">${index + 1}</div>
+                                        <div>
+                                            <strong>${player.web_name}</strong>
+                                            <div style="color: #666; font-size: 0.9rem;">${teamsData[player.team]?.short_name || 'Unknown'} - ${getPlayerPosition(player.element_type)}</div>
+                                        </div>
+                                    </div>
+                                    <div style="text-align: right;">
+                                        <div style="font-weight: bold; color: #28a745;">${player.total_points} pts</div>
+                                        <div style="color: #666; font-size: 0.9rem;">£${(player.now_cost / 10).toFixed(1)}m - ${(player.total_points / (player.now_cost / 10)).toFixed(1)} pts/£m</div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+
+                    ${historyData && historyData.current && historyData.current.length > 0 ? `
+                        <div style="margin-top: 30px;">
+                            <h4>📊 Season Performance</h4>
+                            <div class="stat-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-top: 15px;">
+                                <div class="stat-card">
+                                    <h4>Best Gameweek</h4>
+                                    <div class="stat-value">${historyData.current.reduce((best, gw) => gw.points > best.points ? gw : best, historyData.current[0]).points}</div>
+                                    <div class="stat-description">GW${historyData.current.reduce((best, gw) => gw.points > best.points ? gw : best, historyData.current[0]).event}</div>
+                                </div>
+                                
+                                <div class="stat-card">
+                                    <h4>Worst Gameweek</h4>
+                                    <div class="stat-value">${historyData.current.reduce((worst, gw) => gw.points < worst.points ? gw : worst, historyData.current[0]).points}</div>
+                                    <div class="stat-description">GW${historyData.current.reduce((worst, gw) => gw.points < worst.points ? gw : worst, historyData.current[0]).event}</div>
+                                </div>
+                                
+                                <div class="stat-card">
+                                    <h4>Average GW</h4>
+                                    <div class="stat-value">${Math.round(historyData.current.reduce((sum, gw) => sum + gw.points, 0) / historyData.current.length)}</div>
+                                    <div class="stat-description">points per gameweek</div>
+                                </div>
+                                
+                                <div class="stat-card">
+                                    <h4>Consistency</h4>
+                                    <div class="stat-value">${calculateConsistency(historyData.current)}%</div>
+                                    <div class="stat-description">performance stability</div>
+                                </div>
+                            </div>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+
+            document.getElementById('results').innerHTML = html;
+            hideLoading();
+        }
+
+        // Calculate interesting team facts
+        function calculateTeamFacts(picksData, historyData, teamData) {
+            const facts = {};
+            const players = picksData.picks.map(pick => playersData[pick.element]).filter(Boolean);
+
+            // Team diversity
+            const uniqueTeams = new Set(players.map(p => p.team));
+            facts.teamDiversity = {
+                title: "Team Diversity",
+                value: `${uniqueTeams.size}/20 PL teams`,
+                description: uniqueTeams.size >= 15 ? "Excellent diversity!" : uniqueTeams.size >= 12 ? "Good spread" : "Could diversify more"
+            };
+
+            // Most expensive and cheapest players
+            const mostExpensive = players.reduce((max, p) => p.now_cost > max.now_cost ? p : max);
+            const cheapest = players.reduce((min, p) => p.now_cost < min.now_cost ? p : min);
+            
+            facts.priceRange = {
+                title: "Price Range",
+                value: `£${(cheapest.now_cost / 10).toFixed(1)}m - £${(mostExpensive.now_cost / 10).toFixed(1)}m`,
+                description: `${cheapest.web_name} to ${mostExpensive.web_name}`
+            };
+
+            // Points per million efficiency
+            const totalValue = players.reduce((sum, p) => sum + p.now_cost, 0) / 10;
+            const totalPoints = players.reduce((sum, p) => sum + p.total_points, 0);
+            const efficiency = (totalPoints / totalValue).toFixed(1);
+            
+            facts.efficiency = {
+                title: "Points per £m",
+                value: efficiency,
+                description: efficiency > 15 ? "Excellent value!" : efficiency > 12 ? "Good efficiency" : "Could improve value"
+            };
+
+            // Star players (high scorers)
+            const starPlayers = players.filter(p => p.total_points > 80);
+            facts.starPower = {
+                title: "Star Players",
+                value: `${starPlayers.length} players`,
+                description: starPlayers.length > 3 ? "Star-studded squad!" : starPlayers.length > 1 ? "Good core players" : "Building for the future"
+            };
+
+            // Captain choice analysis
+            const captain = picksData.picks.find(pick => pick.is_captain);
+            const captainPlayer = captain ? playersData[captain.element] : null;
+            if (captainPlayer) {
+                facts.captainChoice = {
+                    title: "Captain Form",
+                    value: `${captainPlayer.total_points} pts`,
+                    description: captainPlayer.total_points > 100 ? "Premium choice!" : captainPlayer.total_points > 70 ? "Solid pick" : "Risky selection"
+                };
+            }
+
+            // Formation analysis
+            const formation = getFormation(picksData.picks);
+            facts.formation = {
+                title: "Formation",
+                value: formation,
+                description: getFormationDescription(formation)
+            };
+
+            return facts;
+        }
+
+        // Generate team fact cards
+        function generateTeamFactCards(facts) {
+            const colors = ['#d4edda', '#cce5ff', '#fff3cd', '#f8d7da', '#e2e3e5', '#ffeaa7'];
+            const borderColors = ['#c3e6cb', '#99d6ff', '#ffeeba', '#f5c6cb', '#d6d8db', '#fdcb6e'];
+            
+            return Object.values(facts).map((fact, index) => `
+                <div style="background: ${colors[index % colors.length]}; border: 1px solid ${borderColors[index % borderColors.length]}; border-radius: 8px; padding: 15px; text-align: center;">
+                    <h4 style="margin-bottom: 10px; color: #333;">${fact.title}</h4>
+                    <div style="font-weight: bold; font-size: 1.2rem; color: #333; margin-bottom: 5px;">${fact.value}</div>
+                    <div style="color: #666; font-size: 0.9rem;">${fact.description}</div>
+                </div>
+            `).join('');
+        }
+
+        // Helper functions
+        function getPlayerPosition(elementType) {
+            const positions = { 1: 'GK', 2: 'DEF', 3: 'MID', 4: 'FWD' };
+            return positions[elementType] || 'Unknown';
+        }
+
+        function getFormation(picks) {
+            const starting11 = picks.filter(pick => pick.multiplier > 0);
+            const positions = { 1: 0, 2: 0, 3: 0, 4: 0 };
+            
+            starting11.forEach(pick => {
+                const player = playersData[pick.element];
+                if (player) positions[player.element_type]++;
+            });
+            
+            return `${positions[2]}-${positions[3]}-${positions[4]}`;
+        }
+
+        function getFormationDescription(formation) {
+            const descriptions = {
+                '3-4-3': 'Attacking formation',
+                '3-5-2': 'Midfield heavy',
+                '4-3-3': 'Balanced attack',
+                '4-4-2': 'Classic formation',
+                '4-5-1': 'Defensive setup',
+                '5-3-2': 'Ultra defensive',
+                '5-4-1': 'Safety first'
+            };
+            return descriptions[formation] || 'Custom setup';
+        }
+
+        function calculateConsistency(gameweeks) {
+            if (gameweeks.length < 3) return 0;
+            
+            const averagePoints = gameweeks.reduce((sum, gw) => sum + gw.points, 0) / gameweeks.length;
+            const variance = gameweeks.reduce((sum, gw) => sum + Math.pow(gw.points - averagePoints, 2), 0) / gameweeks.length;
+            const standardDeviation = Math.sqrt(variance);
+            
+            const maxExpectedStdDev = averagePoints * 0.5;
+            const consistency = Math.max(0, Math.min(100, 100 - (standardDeviation / maxExpectedStdDev) * 100));
+            
+            return Math.round(consistency);
+        }
+
+        function getTopPerformers(picks) {
+            const players = picks.map(pick => playersData[pick.element]).filter(Boolean);
+            return players.sort((a, b) => b.total_points - a.total_points);
+        }
+
+        // Enhanced League Analysis
+        async function analyzeLeague() {
+            const leagueId = document.getElementById('leagueId').value;
+            if (!leagueId) {
+                alert('Please enter a league ID');
+                return;
+            }
+
+            if (!workingProxy) {
+                alert('No proxy connection available. Please wait for connection or refresh the page.');
+                return;
+            }
+
+            const selectedSize = getSelectedLeagueSize();
+
+            showLoading();
+            document.getElementById('loadingText').textContent = `Analyzing league ${leagueId} (top ${selectedSize} teams)...`;
+
+            try {
+                await initializeData();
+
+                const stepId1 = addProgressStep(`Fetching league data for ${leagueId}...`, 'pending');
+                const leagueData = await fetchWithProxy(`leagues-classic/${leagueId}/standings/`);
+                updateProgressStep(stepId1, `League data loaded: ${leagueData.league.name}`, 'completed');
+
+                const stepId2 = addProgressStep('Fetching detailed team data...', 'pending');
+                const teamsToAnalyze = leagueData.standings.results.slice(0, selectedSize);
+                
+                // Clear previous cache for this league
+                cachedLeagueTeamData = {};
+                cachedTeamNames = {};
+                
+                const detailedTeamData = [];
+                const batchSize = 5; // Process in smaller batches
+                
+                for (let i = 0; i < teamsToAnalyze.length; i += batchSize) {
+                    const batch = teamsToAnalyze.slice(i, i + batchSize);
+                    updateProgressStep(stepId2, `Processing teams ${i + 1}-${Math.min(i + batchSize, teamsToAnalyze.length)}/${teamsToAnalyze.length}...`, 'pending');
+                    
+                    // Process batch in parallel but with controlled concurrency
+                    const batchPromises = batch.map(async (team, batchIndex) => {
+                        try {
+                            // Small delay between concurrent requests
+                            await new Promise(resolve => setTimeout(resolve, batchIndex * 200));
+
+                            const [teamInfo, currentPicks, history] = await Promise.all([
+                                fetchWithProxy(`entry/${team.entry}/`),
+                                fetchWithProxy(`entry/${team.entry}/event/${currentGameweek}/picks/`),
+                                fetchWithProxy(`entry/${team.entry}/history/`).catch(() => null)
+                            ]);
+
+                            const teamValue = currentPicks.picks.reduce((total, pick) => {
+                                return total + (playersData[pick.element]?.now_cost || 0);
+                            }, 0) / 10;
+
+                            // Cache the team picks data for later use in creator comparison
+                            cachedLeagueTeamData[team.entry] = {
+                                picks: currentPicks.picks,
+                                starting11: currentPicks.picks.filter(pick => pick.multiplier > 0).map(pick => pick.element)
+                            };
+
+                            // Cache team names for display
+                            cachedTeamNames[team.entry] = team.player_name;
+
+                            return {
+                                ...team,
+                                teamInfo,
+                                currentPicks,
+                                history,
+                                teamValue,
+                                error: false
+                            };
+                        } catch (error) {
+                            console.warn(`Error fetching data for team ${team.entry}:`, error);
+                            return { ...team, error: true, errorMessage: error.message };
+                        }
+                    });
+
+                    const batchResults = await Promise.all(batchPromises);
+                    detailedTeamData.push(...batchResults);
+                    
+                    // Delay between batches to respect API limits
+                    if (i + batchSize < teamsToAnalyze.length) {
+                        await new Promise(resolve => setTimeout(resolve, 800));
+                    }
+                }
+                
+                updateProgressStep(stepId2, `Analyzed ${detailedTeamData.filter(t => !t.error).length}/${teamsToAnalyze.length} teams successfully`, 'completed');
+
+                generateEnhancedLeagueAnalysis(leagueData, detailedTeamData);
+
+            } catch (error) {
+                console.error('League analysis error:', error);
+                showError(error.message);
+            }
+        }
+
+
+
+
+
+        // Generate enhanced league analysis
+        function generateEnhancedLeagueAnalysis(leagueData, detailedTeamData) {
+            const validTeams = detailedTeamData.filter(team => !team.error);
+            const leagueInsights = calculateLeagueInsights(validTeams);
+
+            const html = `
+                <div style="margin: 30px 0; padding: 20px; background: white; border-radius: 10px; box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);">
+                    <h3 style="color: #38003c; margin-bottom: 20px; border-bottom: 2px solid #38003c; padding-bottom: 10px;">
+                        🏆 ${leagueData.league.name}
+                    </h3>
+                    
+                    <div class="stat-grid">
+                        <div class="stat-card">
+                            <h4>Total Managers</h4>
+                            <div class="stat-value">${leagueData.standings.results.length}</div>
+                            <div class="stat-description">active participants</div>
+                        </div>
+                        
+                        <div class="stat-card">
+                            <h4>Average Points</h4>
+                            <div class="stat-value">${leagueInsights.averagePoints}</div>
+                            <div class="stat-description">league average</div>
+                        </div>
+                        
+                        <div class="stat-card">
+                            <h4>Points Spread</h4>
+                            <div class="stat-value">${leagueInsights.pointsSpread}</div>
+                            <div class="stat-description">1st to last place</div>
+                        </div>
+                        
+                        <div class="stat-card">
+                            <h4>Avg Team Value</h4>
+                            <div class="stat-value">£${leagueInsights.averageTeamValue}m</div>
+                            <div class="stat-description">squad values</div>
+                        </div>
+                    </div>
+
+                    <!-- League Insights Table -->
+                    <div style="margin: 30px 0; background: #f8f9fa; border-radius: 10px; padding: 20px;">
+                        <h3 style="color: #38003c; margin-bottom: 20px; text-align: center;">📊 Gameweek ${currentGameweek} League Insights</h3>
+                        
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+                            ${generateInsightCards(leagueInsights)}
+                        </div>
+                    </div>
+
+                    <!-- Content Creator Comparison Button -->
+                    <div style="text-align: center; margin: 30px 0;">
+                        <button onclick="compareLeagueWithCreators('${leagueId}')" style="padding: 15px 30px; background: linear-gradient(45deg, #38003c, #764ba2); color: white; border: none; border-radius: 10px; font-size: 1.1rem; font-weight: bold; cursor: pointer; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);">
+                            ⚡ Compare League with Content Creators (Instant)
+                        </button>
+                        <div style="font-size: 0.8rem; color: #666; margin-top: 5px;">Uses cached data - no additional API calls needed!</div>
+                    </div>
+
+                    <div id="creatorComparison" style="display: none;"></div>
+
+                    <!-- League Standings -->
+                    <div style="margin: 30px 0;">
+                        <h3 style="color: #38003c; margin-bottom: 20px; border-bottom: 2px solid #38003c; padding-bottom: 10px;">📊 League Standings</h3>
+                        <div style="margin-bottom: 15px; padding: 10px; background: #e3f2fd; border-radius: 8px; text-align: center;">
+                            <small style="color: #1976d2;">💡 Click on any team name to analyze their squad in detail</small>
+                        </div>
+                        <div style="display: grid; gap: 15px;">
+                            ${leagueData.standings.results.slice(0, Math.min(detailedTeamData.length, 50)).map((team, index) => {
+                                const detailedTeam = validTeams.find(t => t.entry === team.entry);
+                                const gwPoints = detailedTeam?.history?.current?.find(gw => gw.event === currentGameweek)?.points || 'N/A';
+                                
+                                return `
+                                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 15px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #38003c;">
+                                        <div style="display: flex; align-items: center;">
+                                            <div style="background: #38003c; color: white; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; margin-right: 15px;">${index + 1}</div>
+                                            <div>
+                                                <strong style="cursor: pointer; color: #38003c; text-decoration: underline;" onclick="analyzeTeamById('${team.entry}')" title="Click to analyze this team">${team.player_name}</strong>
+                                                <div style="color: #666; font-size: 0.9rem;">${team.entry_name}</div>
+                                                ${detailedTeam ? `<div style="color: #888; font-size: 0.8rem;">TV: £${detailedTeam.teamValue.toFixed(1)}m</div>` : ''}
+                                            </div>
+                                        </div>
+                                        <div style="text-align: right;">
+                                            <div style="font-weight: bold;">${team.total} pts</div>
+                                            <div style="color: #666; font-size: 0.9rem;">GW${currentGameweek}: ${gwPoints} pts</div>
+                                            <div style="color: #888; font-size: 0.8rem;">World Rank: ${(detailedTeam?.teamInfo?.summary_overall_rank || team.rank || 'N/A').toLocaleString()}</div>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+
+                    ${validTeams.length > 0 ? `
+                        <div style="margin: 30px 0;">
+                            <h4>🎯 Popular Picks This Gameweek</h4>
+                            <div style="display: grid; gap: 10px; margin-top: 15px;">
+                                ${getLeaguePopularPlayers(validTeams).slice(0, 10).map((pick, index) => `
+                                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: #f8f9fa; border-radius: 8px;">
+                                        <div style="display: flex; align-items: center;">
+                                            <div style="background: #38003c; color: white; width: 25px; height: 25px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; margin-right: 10px; font-size: 0.8rem;">${index + 1}</div>
+                                            <div>
+                                                <strong>${pick.player.web_name}</strong>
+                                                <div style="color: #666; font-size: 0.8rem;">${teamsData[pick.player.team]?.short_name || 'Unknown'}</div>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <span style="font-weight: bold;">${pick.count}/${validTeams.length}</span>
+                                            <span style="color: #666; margin-left: 5px;">(${Math.round((pick.count / validTeams.length) * 100)}%)</span>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                        <div style="margin: 30px 0;">
+                            <h4>🎖️ Popular Captains This Gameweek</h4>
+                            <div style="display: grid; gap: 10px; margin-top: 15px;">
+                                ${getLeaguePopularCaptains(validTeams).slice(0, 5).map((captain, index) => `
+                                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: #fff3cd; border-radius: 8px;">
+                                        <div style="display: flex; align-items: center;">
+                                            <div style="background: #ffc107; color: #212529; width: 25px; height: 25px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; margin-right: 10px; font-size: 0.8rem;">${index + 1}</div>
+                                            <div>
+                                                <strong>${captain.player.web_name}</strong>
+                                                <div style="color: #856404; font-size: 0.8rem;">${teamsData[captain.player.team]?.short_name || 'Unknown'}</div>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <span style="font-weight: bold;">${captain.count} captains</span>
+                                            <span style="color: #856404; margin-left: 5px;">(${Math.round((captain.count / validTeams.length) * 100)}%)</span>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+
+            document.getElementById('results').innerHTML = html;
+            hideLoading();
+        }
+
+
+        // Calculate comprehensive league insights
+        function calculateLeagueInsights(validTeams) {
+            const insights = {
+                averagePoints: 0,
+                pointsSpread: 0,
+                averageTeamValue: 0,
+                managerOfTheWeek: null,
+                mostCaptained: null,
+                mostOwned: null,
+                biggestRise: null,
+                biggestDrop: null,
+                bestTeamValue: null,
+                lowestTeamValue: null
+            };
+
+            if (validTeams.length === 0) return insights;
+
+            // Basic calculations
+            const totalPoints = validTeams.reduce((sum, team) => sum + team.total, 0);
+            insights.averagePoints = Math.round(totalPoints / validTeams.length);
+            insights.pointsSpread = Math.max(...validTeams.map(t => t.total)) - Math.min(...validTeams.map(t => t.total));
+            
+            const totalTeamValue = validTeams.reduce((sum, team) => sum + (team.teamValue || 0), 0);
+            insights.averageTeamValue = (totalTeamValue / validTeams.length).toFixed(1);
+
+            // Manager of the week (highest GW points)
+            let bestGWPoints = 0;
+            validTeams.forEach(team => {
+                if (team.history?.current) {
+                    const latestGW = team.history.current.find(gw => gw.event === currentGameweek);
+                    if (latestGW && latestGW.points > bestGWPoints) {
+                        bestGWPoints = latestGW.points;
+                        insights.managerOfTheWeek = {
+                            name: team.player_name,
+                            points: latestGW.points
+                        };
+                    }
+                }
+            });
+
+            // Most captained player
+            const captainCounts = {};
+            validTeams.forEach(team => {
+                if (team.currentPicks?.picks) {
+                    const captain = team.currentPicks.picks.find(pick => pick.is_captain);
+                    if (captain && playersData[captain.element]) {
+                        const playerName = playersData[captain.element].web_name;
+                        captainCounts[playerName] = (captainCounts[playerName] || 0) + 1;
+                    }
+                }
+            });
+            const mostCaptainedEntry = Object.entries(captainCounts).sort((a, b) => b[1] - a[1])[0];
+            if (mostCaptainedEntry) {
+                insights.mostCaptained = {
+                    player: mostCaptainedEntry[0],
+                    count: mostCaptainedEntry[1]
+                };
+            }
+
+            // Most owned player
+            const playerCounts = {};
+            validTeams.forEach(team => {
+                if (team.currentPicks?.picks) {
+                    team.currentPicks.picks.forEach(pick => {
+                        if (playersData[pick.element]) {
+                            const playerName = playersData[pick.element].web_name;
+                            playerCounts[playerName] = (playerCounts[playerName] || 0) + 1;
+                        }
+                    });
+                }
+            });
+            const mostOwnedEntry = Object.entries(playerCounts).sort((a, b) => b[1] - a[1])[0];
+            if (mostOwnedEntry) {
+                insights.mostOwned = {
+                    player: mostOwnedEntry[0],
+                    count: mostOwnedEntry[1]
+                };
+            }
+
+            // Biggest rank changes
+            let biggestRiseValue = 0;
+            let biggestDropValue = 0;
+            validTeams.forEach(team => {
+                if (team.history?.current && team.history.current.length >= 2) {
+                    const currentGW = team.history.current.find(gw => gw.event === currentGameweek);
+                    const previousGW = team.history.current.find(gw => gw.event === currentGameweek - 1);
+                    
+                    if (currentGW && previousGW) {
+                        const rankChange = previousGW.overall_rank - currentGW.overall_rank; // Positive = rise
+                        
+                        if (rankChange > biggestRiseValue) {
+                            biggestRiseValue = rankChange;
+                            insights.biggestRise = {
+                                name: team.player_name,
+                                change: rankChange
+                            };
+                        }
+                        
+                        if (rankChange < biggestDropValue) {
+                            biggestDropValue = rankChange;
+                            insights.biggestDrop = {
+                                name: team.player_name,
+                                change: Math.abs(rankChange)
+                            };
+                        }
+                    }
+                }
+            });
+
+            // Best and worst team values
+            const teamValues = validTeams.map(team => ({ name: team.player_name, value: team.teamValue || 0 }));
+            insights.bestTeamValue = teamValues.reduce((best, current) => current.value > best.value ? current : best);
+            insights.lowestTeamValue = teamValues.reduce((lowest, current) => current.value < lowest.value ? current : lowest);
+
+            return insights;
+        }
+
+        // Generate insight cards
+        function generateInsightCards(insights) {
+            const cards = [];
+
+            if (insights.managerOfTheWeek) {
+                cards.push(`
+                    <div style="background: #d4edda; border: 1px solid #c3e6cb; border-radius: 8px; padding: 15px; text-align: center;">
+                        <h4 style="color: #155724; margin-bottom: 10px;">🏆 Manager of the Week</h4>
+                        <div style="font-weight: bold; color: #155724;">${insights.managerOfTheWeek.name}</div>
+                        <div style="color: #155724; font-size: 0.9rem;">${insights.managerOfTheWeek.points} points</div>
+                    </div>
+                `);
+            }
+
+            if (insights.mostCaptained) {
+                cards.push(`
+                    <div style="background: #fff3cd; border: 1px solid #ffeeba; border-radius: 8px; padding: 15px; text-align: center;">
+                        <h4 style="color: #856404; margin-bottom: 10px;">⭐ Most Captained</h4>
+                        <div style="font-weight: bold; color: #856404;">${insights.mostCaptained.player}</div>
+                        <div style="color: #856404; font-size: 0.9rem;">${insights.mostCaptained.count} managers</div>
+                    </div>
+                `);
+            }
+
+            if (insights.mostOwned) {
+                cards.push(`
+                    <div style="background: #cce5ff; border: 1px solid #99d6ff; border-radius: 8px; padding: 15px; text-align: center;">
+                        <h4 style="color: #004085; margin-bottom: 10px;">👥 Most Owned Player</h4>
+                        <div style="font-weight: bold; color: #004085;">${insights.mostOwned.player}</div>
+                        <div style="color: #004085; font-size: 0.9rem;">${insights.mostOwned.count} teams</div>
+                    </div>
+                `);
+            }
+
+            if (insights.biggestRise) {
+                cards.push(`
+                    <div style="background: #d1ecf1; border: 1px solid #bee5eb; border-radius: 8px; padding: 15px; text-align: center;">
+                        <h4 style="color: #0c5460; margin-bottom: 10px;">📈 Biggest Rise</h4>
+                        <div style="font-weight: bold; color: #0c5460;">${insights.biggestRise.name}</div>
+                        <div style="color: #0c5460; font-size: 0.9rem;">+${insights.biggestRise.change.toLocaleString()} ranks</div>
+                    </div>
+                `);
+            }
+
+            if (insights.biggestDrop) {
+                cards.push(`
+                    <div style="background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 8px; padding: 15px; text-align: center;">
+                        <h4 style="color: #721c24; margin-bottom: 10px;">📉 Biggest Drop</h4>
+                        <div style="font-weight: bold; color: #721c24;">${insights.biggestDrop.name}</div>
+                        <div style="color: #721c24; font-size: 0.9rem;">-${insights.biggestDrop.change.toLocaleString()} ranks</div>
+                    </div>
+                `);
+            }
+
+            if (insights.bestTeamValue) {
+                cards.push(`
+                    <div style="background: #e2e3e5; border: 1px solid #d6d8db; border-radius: 8px; padding: 15px; text-align: center;">
+                        <h4 style="color: #383d41; margin-bottom: 10px;">💰 Highest Team Value</h4>
+                        <div style="font-weight: bold; color: #383d41;">${insights.bestTeamValue.name}</div>
+                        <div style="color: #383d41; font-size: 0.9rem;">£${insights.bestTeamValue.value.toFixed(1)}m</div>
+                    </div>
+                `);
+            }
+
+            if (insights.lowestTeamValue) {
+                cards.push(`
+                    <div style="background: #ffeaa7; border: 1px solid #fdcb6e; border-radius: 8px; padding: 15px; text-align: center;">
+                        <h4 style="color: #6c5ce7; margin-bottom: 10px;">💸 Budget Squad</h4>
+                        <div style="font-weight: bold; color: #6c5ce7;">${insights.lowestTeamValue.name}</div>
+                        <div style="color: #6c5ce7; font-size: 0.9rem;">£${insights.lowestTeamValue.value.toFixed(1)}m</div>
+                    </div>
+                `);
+            }
+
+            return cards.join('');
+        }
+
+        // Compare league with content creators
+        async function compareLeagueWithCreators(leagueId) {
+            const button = event.target;
+            const originalText = button.textContent;
+            button.textContent = '🔄 Analyzing cached data...';
+            button.disabled = true;
+
+            try {
+                const comparisons = [];
+                
+                // Check if we have creator data loaded
+                const availableCreators = contentCreators.filter(creator => 
+                    contentCreatorData[creator.id] && 
+                    !contentCreatorData[creator.id].error && 
+                    contentCreatorData[creator.id].starting11.length > 0
+                );
+
+                if (availableCreators.length === 0) {
+                    throw new Error('No content creator data available. Please refresh the page and wait for creator data to load.');
+                }
+
+                // Check if we have cached league team data
+                const cachedTeamEntries = Object.keys(cachedLeagueTeamData);
+                if (cachedTeamEntries.length === 0) {
+                    throw new Error('No league team data cached. Please run the league analysis first.');
+                }
+
+                console.log(`Using cached data for ${cachedTeamEntries.length} teams and ${availableCreators.length} creators - NO API CALLS NEEDED!`);
+
+                // Use cached data - NO API CALLS!
+                const teamPicksData = cachedTeamEntries.map(entryId => {
+                    const cachedData = cachedLeagueTeamData[entryId];
+                    return {
+                        entryId,
+                        name: cachedTeamNames[entryId] || `Team ${entryId}`,
+                        picks: cachedData.starting11,
+                        error: false
+                    };
+                });
+
+                button.textContent = '🔄 Comparing with creators...';
+
+                // Compare with preloaded creator data (no additional API calls needed)
+                for (const creator of availableCreators) {
+                    const creatorData = contentCreatorData[creator.id];
+                    const creatorStarting11 = creatorData.starting11;
+                    
+                    let totalMatches = 0;
+                    let matchingTeams = 0;
+                    const teamMatches = [];
+
+                    for (const teamData of teamPicksData) {
+                        if (teamData.error || !teamData.picks) continue;
+                        
+                        const teamStarting11 = teamData.picks;
+                        const commonPlayers = creatorStarting11.filter(player => teamStarting11.includes(player));
+                        const matchCount = commonPlayers.length;
+                        
+                        if (matchCount > 0) {
+                            totalMatches += matchCount;
+                            matchingTeams++;
+                            
+                            teamMatches.push({
+                                name: teamData.name,
+                                entryId: teamData.entryId,
+                                matches: matchCount,
+                                percentage: Math.round((matchCount / 11) * 100)
+                            });
+                        }
+                    }
+
+                    if (totalMatches > 0 || matchingTeams === 0) { // Include creators with 0 matches too
+                        // Sort team matches by percentage (highest first)
+                        teamMatches.sort((a, b) => b.percentage - a.percentage);
+                        
+                        // Find the highest percentage match for this creator
+                        const highestMatch = teamMatches.length > 0 ? teamMatches[0] : { percentage: 0 };
+                        
+                        comparisons.push({
+                            creator: creator.name,
+                            totalMatches,
+                            matchingTeams,
+                            averageMatches: teamPicksData.length > 0 ? (totalMatches / teamPicksData.length).toFixed(1) : '0.0',
+                            topMatches: teamMatches.slice(0, 5), // Show top 5 matches
+                            highestPercentage: highestMatch.percentage, // For sorting
+                            allMatches: teamMatches // Store all matches for detailed view
+                        });
+                    }
+                }
+
+                // Sort by highest percentage match first, then by total matches
+                comparisons.sort((a, b) => {
+                    if (b.highestPercentage !== a.highestPercentage) {
+                        return b.highestPercentage - a.highestPercentage;
+                    }
+                    return b.totalMatches - a.totalMatches;
+                });
+
+                const comparisonHTML = `
+                    <div style="margin: 30px 0; background: #f8f9fa; border-radius: 10px; padding: 20px;">
+                        <h3 style="color: #38003c; margin-bottom: 20px; text-align: center;">🎬 League vs Content Creators</h3>
+                        
+                        <div style="background: #d4edda; border: 1px solid #c3e6cb; border-radius: 8px; padding: 10px; margin-bottom: 15px; text-align: center;">
+                            <small>✅ Using cached data - No API calls needed! Analyzed ${teamPicksData.length} teams with ${availableCreators.length} creators instantly.</small>
+                        </div>
+                        
+                        ${comparisons.length > 0 ? `
+                            <div style="display: grid; gap: 15px;">
+                                ${comparisons.map((comparison, index) => {
+                                    const hasMatches = comparison.topMatches && comparison.topMatches.length > 0;
+                                    const expandId = `expand-${index}`;
+                                    
+                                    return `
+                                        <div style="background: white; border-radius: 8px; padding: 15px; border-left: 4px solid #38003c;">
+                                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                                <div style="display: flex; align-items: center;">
+                                                    <div style="background: #38003c; color: white; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; margin-right: 15px;">${index + 1}</div>
+                                                    <div>
+                                                        <strong style="color: #38003c;">${comparison.creator}</strong>
+                                                        <div style="color: #666; font-size: 0.9rem;">
+                                                            Avg ${comparison.averageMatches} players per team
+                                                            ${hasMatches ? ` | Highest: ${comparison.highestPercentage}%` : ''}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div style="text-align: right;">
+                                                    <div style="font-weight: bold; color: #38003c;">${comparison.totalMatches} total matches</div>
+                                                    <div style="color: #666; font-size: 0.9rem;">${comparison.matchingTeams} teams affected</div>
+                                                </div>
+                                            </div>
+                                            
+                                            ${hasMatches ? `
+                                                <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #eee;">
+                                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                                        <small style="color: #666; font-weight: bold;">Team Matches (Highest to Lowest):</small>
+                                                        ${comparison.allMatches.length > 5 ? `
+                                                            <button onclick="toggleDetails('${expandId}')" style="background: none; border: 1px solid #38003c; color: #38003c; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; cursor: pointer;">
+                                                                Show All (${comparison.allMatches.length})
+                                                            </button>
+                                                        ` : ''}
+                                                    </div>
+                                                    
+                                                    <div style="display: grid; gap: 5px;">
+                                                        ${comparison.topMatches.map(match => `
+                                                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 5px 10px; background: #f8f9fa; border-radius: 5px; border-left: 3px solid ${match.percentage >= 80 ? '#28a745' : match.percentage >= 60 ? '#ffc107' : '#6c757d'};">
+                                                                <span style="font-weight: 500; cursor: pointer;" onclick="analyzeTeamById('${match.entryId}')" title="Click to analyze this team">
+                                                                    ${match.name}
+                                                                </span>
+                                                                <span style="font-weight: bold; color: ${match.percentage >= 80 ? '#28a745' : match.percentage >= 60 ? '#856404' : '#6c757d'};">
+                                                                    ${match.matches}/11 (${match.percentage}%)
+                                                                </span>
+                                                            </div>
+                                                        `).join('')}
+                                                    </div>
+                                                    
+                                                    ${comparison.allMatches.length > 5 ? `
+                                                        <div id="${expandId}" style="display: none; margin-top: 10px; padding-top: 10px; border-top: 1px solid #eee;">
+                                                            <div style="display: grid; gap: 5px;">
+                                                                ${comparison.allMatches.slice(5).map(match => `
+                                                                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 5px 10px; background: #f8f9fa; border-radius: 5px; border-left: 3px solid ${match.percentage >= 80 ? '#28a745' : match.percentage >= 60 ? '#ffc107' : '#6c757d'};">
+                                                                        <span style="font-weight: 500; cursor: pointer;" onclick="analyzeTeamById('${match.entryId}')" title="Click to analyze this team">
+                                                                            ${match.name}
+                                                                        </span>
+                                                                        <span style="font-weight: bold; color: ${match.percentage >= 80 ? '#28a745' : match.percentage >= 60 ? '#856404' : '#6c757d'};">
+                                                                            ${match.matches}/11 (${match.percentage}%)
+                                                                        </span>
+                                                                    </div>
+                                                                `).join('')}
+                                                            </div>
+                                                        </div>
+                                                    ` : ''}
+                                                </div>
+                                            ` : `
+                                                <div style="margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 5px; text-align: center; color: #666;">
+                                                    No matching teams found
+                                                </div>
+                                            `}
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        ` : `
+                            <p style="text-align: center; color: #666;">No content creators data available for comparison.</p>
+                        `}
+                        
+                        <div style="margin-top: 15px; padding: 10px; background: #e9ecef; border-radius: 5px; font-size: 0.9rem; color: #666; text-align: center;">
+                            <strong>⚡ Instant Analysis:</strong> Used cached data for ${teamPicksData.length} teams and ${availableCreators.length} creators
+                            <br><small>💡 Click on any team name to analyze that team | Green: 80%+ match, Yellow: 60%+ match</small>
+                        </div>
+                    </div>
+                `;
+
+                document.getElementById('creatorComparison').innerHTML = comparisonHTML;
+                document.getElementById('creatorComparison').style.display = 'block';
+
+            } catch (error) {
+                console.error('Error comparing with content creators:', error);
+                
+                document.getElementById('creatorComparison').innerHTML = `
+                    <div style="background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 8px; padding: 15px; margin: 20px 0; text-align: center;">
+                        <strong>Error:</strong> ${error.message}<br><br>
+                        ${error.message.includes('cached') ? 
+                            '<strong>Solution:</strong> Run the league analysis first to cache the team data.' : 
+                            '<strong>Solution:</strong> Refresh the page to reload content creator data.'
+                        }
+                    </div>
+                `;
+                document.getElementById('creatorComparison').style.display = 'block';
+            } finally {
+                button.textContent = originalText;
+                button.disabled = false;
+            }
+        }
+
+
+
+        // ADD these new helper functions
+        function toggleDetails(expandId) {
+            const element = document.getElementById(expandId);
+            const button = event.target;
+            
+            if (element.style.display === 'none') {
+                element.style.display = 'block';
+                button.textContent = 'Show Less';
+            } else {
+                element.style.display = 'none';
+                button.textContent = button.textContent.replace('Show Less', 'Show All');
+            }
+        }
+
+        function analyzeTeamById(teamId) {
+            // Switch to team analyzer tab
+            showTeamAnalyzer();
+            
+            // Fill the team ID input
+            document.getElementById('teamId').value = teamId;
+            
+            // Scroll to top
+            window.scrollTo(0, 0);
+            
+            // Automatically start analysis
+            analyzeTeam();
+        }
+
+
+
+
+        // Get league popular players
+        function getLeaguePopularPlayers(teams) {
+            const playerCounts = {};
+            
+            teams.forEach(team => {
+                if (team.currentPicks && team.currentPicks.picks) {
+                    team.currentPicks.picks.forEach(pick => {
+                        if (!playerCounts[pick.element]) {
+                            playerCounts[pick.element] = {
+                                player: playersData[pick.element],
+                                count: 0
+                            };
+                        }
+                        playerCounts[pick.element].count++;
+                    });
+                }
+            });
+
+            return Object.values(playerCounts)
+                .filter(item => item.player)
+                .sort((a, b) => b.count - a.count);
+        }
+
+        // Get league popular captains
+        function getLeaguePopularCaptains(teams) {
+            const captainCounts = {};
+            
+            teams.forEach(team => {
+                if (team.currentPicks && team.currentPicks.picks) {
+                    const captain = team.currentPicks.picks.find(pick => pick.is_captain);
+                    if (captain) {
+                        if (!captainCounts[captain.element]) {
+                            captainCounts[captain.element] = {
+                                player: playersData[captain.element],
+                                count: 0
+                            };
+                        }
+                        captainCounts[captain.element].count++;
+                    }
+                }
+            });
+
+            return Object.values(captainCounts)
+                .filter(item => item.player)
+                .sort((a, b) => b.count - a.count);
+        }
+
+        // Initialize the app
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('analyzeTeamBtn').disabled = true;
+            document.getElementById('analyzeLeagueBtn').disabled = true;
+
+            document.getElementById('teamId').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter' && workingProxy) analyzeTeam();
+            });
+            
+            document.getElementById('leagueId').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter' && workingProxy) analyzeLeague();
+            });
+
+            testProxyServices();
+
+            console.log('FPL Analyzer (Fixed Version) loaded successfully!');
+        });
+    </script>
+</body>
+</html>
