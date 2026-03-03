@@ -484,6 +484,16 @@
         let workingProxy = null;
         let contentCreatorData = {}; // Store preloaded creator data
         let isLoadingCreators = false;
+        let creatorDataInitialized = false;
+
+        function escapeHtml(str) {
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
         let cachedLeagueTeamData = {}; // Store league team picks data
         let cachedTeamNames = {}; // Store team names for display
         let contentCreatorCacheKey = 'fpl_creator_cache_v1';
@@ -545,9 +555,6 @@
                 `;
                 
                 enableButtons();
-                
-                // Start preloading creator data in background
-                preloadContentCreatorDataBackground();
             } else {
                 updateProxyStatus('❌ All proxy services failed. Please try again later.', 'error');
                 document.getElementById('connectionStatus').className = 'status-indicator error';
@@ -879,6 +886,10 @@
                     }
                     
                     console.log(`✅ ${proxy.name} proxy successful`);
+                    if (workingProxy !== proxy) {
+                        workingProxy = proxy;
+                        console.log(`Updated working proxy to ${proxy.name}`);
+                    }
                     return data;
                     
                 } catch (error) {
@@ -986,6 +997,12 @@
 
                 console.log(`Initialized with ${Object.keys(playersData).length} players and ${Object.keys(teamsData).length} teams`);
                 addProgressStep(`Game data: ${Object.keys(playersData).length} players, ${Object.keys(teamsData).length} teams, GW${currentGameweek}`, 'completed');
+
+                // Trigger creator preloading now that we have the correct gameweek
+                if (!creatorDataInitialized) {
+                    creatorDataInitialized = true;
+                    preloadContentCreatorDataBackground();
+                }
 
             } catch (error) {
                 updateProgressStep(stepId, `Failed to load game data: ${error.message}`, 'error');
@@ -1701,7 +1718,7 @@
             const html = `
                 <div style="margin: 30px 0; padding: 20px; background: white; border-radius: 10px; box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);">
                     <h3 style="color: #38003c; margin-bottom: 20px; border-bottom: 2px solid #38003c; padding-bottom: 10px;">
-                        🏆 ${leagueData.league.name}
+                        🏆 ${escapeHtml(leagueData.league.name)}
                     </h3>
                     
                     <div class="stat-grid">
@@ -1712,7 +1729,7 @@
                         </div>
                         
                         <div class="stat-card">
-                            <h4>Average Points</h4>
+                            <h4>Avg Season Points</h4>
                             <div class="stat-value">${leagueInsights.averagePoints}</div>
                             <div class="stat-description">league average</div>
                         </div>
@@ -1720,7 +1737,7 @@
                         <div class="stat-card">
                             <h4>Points Spread</h4>
                             <div class="stat-value">${leagueInsights.pointsSpread}</div>
-                            <div class="stat-description">1st to last place</div>
+                            <div class="stat-description">season total spread</div>
                         </div>
                         
                         <div class="stat-card">
@@ -1756,7 +1773,7 @@
                             <small style="color: #1976d2;">💡 Click on any team name to analyze their squad in detail</small>
                         </div>
                         <div style="display: grid; gap: 15px;">
-                            ${leagueData.standings.results.slice(0, Math.min(detailedTeamData.length, 50)).map((team, index) => {
+                            ${leagueData.standings.results.slice(0, detailedTeamData.length).map((team, index) => {
                                 const detailedTeam = validTeams.find(t => t.entry === team.entry);
                                 const gwPoints = detailedTeam?.history?.current?.find(gw => gw.event === currentGameweek)?.points || 'N/A';
                                 
@@ -1765,8 +1782,8 @@
                                         <div style="display: flex; align-items: center;">
                                             <div style="background: #38003c; color: white; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; margin-right: 15px;">${index + 1}</div>
                                             <div>
-                                                <strong style="cursor: pointer; color: #38003c; text-decoration: underline;" onclick="analyzeTeamById('${team.entry}')" title="Click to analyze this team">${team.player_name}</strong>
-                                                <div style="color: #666; font-size: 0.9rem;">${team.entry_name}</div>
+                                                <strong style="cursor: pointer; color: #38003c; text-decoration: underline;" onclick="analyzeTeamById('${team.entry}')" title="Click to analyze this team">${escapeHtml(team.player_name)}</strong>
+                                                <div style="color: #666; font-size: 0.9rem;">${escapeHtml(team.entry_name)}</div>
                                                 ${detailedTeam ? `<div style="color: #888; font-size: 0.8rem;">TV: £${detailedTeam.teamValue.toFixed(1)}m</div>` : ''}
                                             </div>
                                         </div>
@@ -1843,7 +1860,7 @@
                                     ${Object.entries(chipUsage).filter(([, users]) => users.length > 0).map(([chip, users]) => `
                                         <div style="background: white; border-radius: 8px; padding: 12px; border-left: 4px solid #764ba2;">
                                             <div style="font-weight: bold; margin-bottom: 6px;">${chipLabels[chip] || chip} — ${users.length} manager(s)</div>
-                                            <div style="font-size: 0.85rem; color: #555;">${users.map(u => u.manager + ' (GW' + u.gw + ')').join(', ')}</div>
+                                            <div style="font-size: 0.85rem; color: #555;">${users.map(u => escapeHtml(u.manager) + ' (GW' + u.gw + ')').join(', ')}</div>
                                         </div>
                                     `).join('')}
                                 </div>
@@ -1869,14 +1886,14 @@
                                 <div style="margin-top: 15px; display: grid; gap: 8px;">
                                     ${transferData.filter(t => t.transfers > 0).slice(0, 10).map(t => `
                                         <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: white; border-radius: 6px;">
-                                            <span>${t.name}</span>
+                                            <span>${escapeHtml(t.name)}</span>
                                             <div>
                                                 <span style="background: #007bff; color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.8rem;">${t.transfers} transfer${t.transfers !== 1 ? 's' : ''}</span>
                                                 ${t.hits > 0 ? '<span style="background: #dc3545; color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.8rem; margin-left: 5px;">-' + t.hits + ' hit</span>' : ''}
                                             </div>
                                         </div>
                                     `).join('')}
-                                    ${hitsManagers.length > 0 ? '<div style="margin-top: 5px; color: #dc3545; font-size: 0.85rem;">⚠️ Managers taking hits: ' + hitsManagers.map(m => m.name).join(', ') + '</div>' : ''}
+                                    ${hitsManagers.length > 0 ? '<div style="margin-top: 5px; color: #dc3545; font-size: 0.85rem;">⚠️ Managers taking hits: ' + hitsManagers.map(m => escapeHtml(m.name)).join(', ') + '</div>' : ''}
                                 </div>
                             </div>`;
                         })()}
@@ -1976,7 +1993,24 @@
                 biggestRise: null,
                 biggestDrop: null,
                 bestTeamValue: null,
-                lowestTeamValue: null
+                lowestTeamValue: null,
+                gwAverage: null,
+                lowestGWScore: null,
+                gwMedian: null,
+                mostHitsTaken: null,
+                mostTransfers: null,
+                bestValuePick: null,
+                captainSuccess: null,
+                bestGoalkeeper: null,
+                biggestHaul: null,
+                mostConsistent: null,
+                mostVolatile: null,
+                mostSimilar: null,
+                mostUnique: null,
+                benchwarmHero: null,
+                totalTransfers: 0,
+                totalHitsCost: 0,
+                popularFormation: null
             };
 
             if (validTeams.length === 0) return insights;
@@ -1989,17 +2023,37 @@
             const totalTeamValue = validTeams.reduce((sum, team) => sum + (team.teamValue || 0), 0);
             insights.averageTeamValue = (totalTeamValue / validTeams.length).toFixed(1);
 
-            // Manager of the week (highest GW points)
+            // GW points list (used for multiple stats)
+            const gwPointsList = validTeams
+                .map(team => team.history?.current?.find(gw => gw.event === currentGameweek)?.points)
+                .filter(p => p !== undefined);
+
+            // GW Average Points
+            if (gwPointsList.length > 0) {
+                insights.gwAverage = Math.round(gwPointsList.reduce((a, b) => a + b, 0) / gwPointsList.length);
+            }
+
+            // GW Median Score
+            if (gwPointsList.length > 0) {
+                const sorted = [...gwPointsList].sort((a, b) => a - b);
+                insights.gwMedian = sorted[Math.floor(sorted.length / 2)];
+            }
+
+            // Manager of the week (highest GW points) and Lowest GW Score
             let bestGWPoints = 0;
+            let lowestGWPoints = Infinity;
             validTeams.forEach(team => {
                 if (team.history?.current) {
                     const latestGW = team.history.current.find(gw => gw.event === currentGameweek);
-                    if (latestGW && latestGW.points > bestGWPoints) {
-                        bestGWPoints = latestGW.points;
-                        insights.managerOfTheWeek = {
-                            name: team.player_name,
-                            points: latestGW.points
-                        };
+                    if (latestGW) {
+                        if (latestGW.points > bestGWPoints) {
+                            bestGWPoints = latestGW.points;
+                            insights.managerOfTheWeek = { name: team.player_name, points: latestGW.points };
+                        }
+                        if (latestGW.points < lowestGWPoints) {
+                            lowestGWPoints = latestGW.points;
+                            insights.lowestGWScore = { name: team.player_name, points: latestGW.points };
+                        }
                     }
                 }
             });
@@ -2017,10 +2071,7 @@
             });
             const mostCaptainedEntry = Object.entries(captainCounts).sort((a, b) => b[1] - a[1])[0];
             if (mostCaptainedEntry) {
-                insights.mostCaptained = {
-                    player: mostCaptainedEntry[0],
-                    count: mostCaptainedEntry[1]
-                };
+                insights.mostCaptained = { player: mostCaptainedEntry[0], count: mostCaptainedEntry[1] };
             }
 
             // Most owned player
@@ -2037,46 +2088,235 @@
             });
             const mostOwnedEntry = Object.entries(playerCounts).sort((a, b) => b[1] - a[1])[0];
             if (mostOwnedEntry) {
-                insights.mostOwned = {
-                    player: mostOwnedEntry[0],
-                    count: mostOwnedEntry[1]
-                };
+                insights.mostOwned = { player: mostOwnedEntry[0], count: mostOwnedEntry[1] };
             }
 
-            // Biggest rank changes
-            let biggestRiseValue = 0;
-            let biggestDropValue = 0;
+            // Biggest rank changes (skip on GW1 — no previous GW exists)
+            if (currentGameweek > 1) {
+                let biggestRiseValue = 0;
+                let biggestDropValue = 0;
+                validTeams.forEach(team => {
+                    if (team.history?.current && team.history.current.length >= 2) {
+                        const currentGW = team.history.current.find(gw => gw.event === currentGameweek);
+                        const previousGW = team.history.current.find(gw => gw.event === currentGameweek - 1);
+                        if (currentGW && previousGW) {
+                            const rankChange = previousGW.overall_rank - currentGW.overall_rank; // Positive = rise
+                            if (rankChange > biggestRiseValue) {
+                                biggestRiseValue = rankChange;
+                                insights.biggestRise = { name: team.player_name, change: rankChange };
+                            }
+                            if (rankChange < biggestDropValue) {
+                                biggestDropValue = rankChange;
+                                insights.biggestDrop = { name: team.player_name, change: Math.abs(rankChange) };
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Best and worst team values
+            const teamValues = validTeams.map(team => ({ name: team.player_name, value: team.teamValue || 0 }));
+            insights.bestTeamValue = teamValues.reduce((best, current) => current.value > best.value ? current : best);
+            insights.lowestTeamValue = teamValues.reduce((lowest, current) => current.value < lowest.value ? current : lowest);
+
+            // Most Hits Taken and Most Transfers Made this GW
+            let maxHits = 0;
+            let maxTransfers = 0;
             validTeams.forEach(team => {
-                if (team.history?.current && team.history.current.length >= 2) {
-                    const currentGW = team.history.current.find(gw => gw.event === currentGameweek);
-                    const previousGW = team.history.current.find(gw => gw.event === currentGameweek - 1);
-                    
-                    if (currentGW && previousGW) {
-                        const rankChange = previousGW.overall_rank - currentGW.overall_rank; // Positive = rise
-                        
-                        if (rankChange > biggestRiseValue) {
-                            biggestRiseValue = rankChange;
-                            insights.biggestRise = {
-                                name: team.player_name,
-                                change: rankChange
+                const gwData = team.history?.current?.find(gw => gw.event === currentGameweek);
+                if (gwData) {
+                    if (gwData.event_transfers_cost > maxHits) {
+                        maxHits = gwData.event_transfers_cost;
+                        insights.mostHitsTaken = { name: team.player_name, hits: gwData.event_transfers_cost };
+                    }
+                    if (gwData.event_transfers > maxTransfers) {
+                        maxTransfers = gwData.event_transfers;
+                        insights.mostTransfers = { name: team.player_name, transfers: gwData.event_transfers };
+                    }
+                }
+            });
+
+            // Total League Transfers and Total Hits Cost
+            insights.totalTransfers = validTeams.reduce((sum, team) => {
+                const gwData = team.history?.current?.find(gw => gw.event === currentGameweek);
+                return sum + (gwData?.event_transfers || 0);
+            }, 0);
+            insights.totalHitsCost = validTeams.reduce((sum, team) => {
+                const gwData = team.history?.current?.find(gw => gw.event === currentGameweek);
+                return sum + (gwData?.event_transfers_cost || 0);
+            }, 0);
+
+            // Best Value Pick: highest total_points player under £6.5m in any starting XI
+            let bestValuePoints = 0;
+            validTeams.forEach(team => {
+                if (team.currentPicks?.picks) {
+                    team.currentPicks.picks.filter(p => p.multiplier > 0).forEach(pick => {
+                        const player = playersData[pick.element];
+                        if (player && player.now_cost < 65 && player.total_points > bestValuePoints) { // 65 = £6.5m in FPL API (tenths)
+                            bestValuePoints = player.total_points;
+                            insights.bestValuePick = {
+                                player: player.web_name,
+                                points: player.total_points,
+                                cost: (player.now_cost / 10).toFixed(1)
                             };
                         }
-                        
-                        if (rankChange < biggestDropValue) {
-                            biggestDropValue = rankChange;
-                            insights.biggestDrop = {
-                                name: team.player_name,
-                                change: Math.abs(rankChange)
+                    });
+                }
+            });
+
+            // Captain Success: captain with most event_points
+            let bestCaptainPoints = 0;
+            validTeams.forEach(team => {
+                if (team.currentPicks?.picks) {
+                    const captain = team.currentPicks.picks.find(p => p.is_captain);
+                    if (captain && playersData[captain.element]) {
+                        const player = playersData[captain.element];
+                        const ep = player.event_points || 0;
+                        if (ep > bestCaptainPoints) {
+                            bestCaptainPoints = ep;
+                            insights.captainSuccess = {
+                                player: player.web_name,
+                                manager: team.player_name,
+                                points: ep
                             };
                         }
                     }
                 }
             });
 
-            // Best and worst team values
-            const teamValues = validTeams.map(team => ({ name: team.player_name, value: team.teamValue || 0 }));
-            insights.bestTeamValue = teamValues.reduce((best, current) => current.value > best.value ? current : best);
-            insights.lowestTeamValue = teamValues.reduce((lowest, current) => current.value < lowest.value ? current : lowest);
+            // Best Goalkeeper: highest total_points GK in any squad
+            let bestGKPoints = 0;
+            validTeams.forEach(team => {
+                if (team.currentPicks?.picks) {
+                    team.currentPicks.picks.forEach(pick => {
+                        const player = playersData[pick.element];
+                        if (player && player.element_type === 1 && player.total_points > bestGKPoints) {
+                            bestGKPoints = player.total_points;
+                            insights.bestGoalkeeper = { player: player.web_name, points: player.total_points };
+                        }
+                    });
+                }
+            });
+
+            // Biggest Points Haul: single event_points in any starting XI
+            let biggestHaulPoints = 0;
+            validTeams.forEach(team => {
+                if (team.currentPicks?.picks) {
+                    team.currentPicks.picks.filter(p => p.multiplier > 0).forEach(pick => {
+                        const player = playersData[pick.element];
+                        const ep = player?.event_points || 0;
+                        if (ep > biggestHaulPoints) {
+                            biggestHaulPoints = ep;
+                            insights.biggestHaul = {
+                                player: player.web_name,
+                                manager: team.player_name,
+                                points: ep
+                            };
+                        }
+                    });
+                }
+            });
+
+            // Most Consistent Manager: lowest std dev in GW scores
+            let lowestStdDev = Infinity;
+            // Most Volatile Manager: highest std dev in GW scores
+            let highestStdDev = 0;
+            validTeams.forEach(team => {
+                if (team.history?.current && team.history.current.length >= 3) { // Need at least 3 GWs for meaningful std dev
+                    const gwScores = team.history.current.map(gw => gw.points);
+                    const mean = gwScores.reduce((a, b) => a + b, 0) / gwScores.length;
+                    const stdDev = Math.sqrt(gwScores.reduce((sum, p) => sum + Math.pow(p - mean, 2), 0) / gwScores.length);
+                    if (stdDev < lowestStdDev) {
+                        lowestStdDev = stdDev;
+                        insights.mostConsistent = { name: team.player_name, stdDev: stdDev.toFixed(1) };
+                    }
+                    if (stdDev > highestStdDev) {
+                        highestStdDev = stdDev;
+                        insights.mostVolatile = { name: team.player_name, stdDev: stdDev.toFixed(1) };
+                    }
+                }
+            });
+
+            // Most Similar Teams and Most Unique Team (squad overlap)
+            if (validTeams.length >= 2) {
+                let highestOverlap = 0;
+                for (let i = 0; i < validTeams.length; i++) {
+                    for (let j = i + 1; j < validTeams.length; j++) {
+                        const squad1 = validTeams[i].currentPicks?.picks?.map(p => p.element) || [];
+                        const squad2 = validTeams[j].currentPicks?.picks?.map(p => p.element) || [];
+                        if (squad1.length === 0 || squad2.length === 0) continue;
+                        const overlap = squad1.filter(id => squad2.includes(id)).length;
+                        if (overlap > highestOverlap) {
+                            highestOverlap = overlap;
+                            insights.mostSimilar = {
+                                manager1: validTeams[i].player_name,
+                                manager2: validTeams[j].player_name,
+                                overlap
+                            };
+                        }
+                    }
+                }
+
+                let lowestAvgOverlap = Infinity;
+                validTeams.forEach((team, i) => {
+                    const squad = team.currentPicks?.picks?.map(p => p.element) || [];
+                    if (squad.length === 0) return;
+                    let totalOverlap = 0;
+                    let count = 0;
+                    validTeams.forEach((otherTeam, j) => {
+                        if (i === j) return;
+                        const otherSquad = otherTeam.currentPicks?.picks?.map(p => p.element) || [];
+                        if (otherSquad.length === 0) return;
+                        totalOverlap += squad.filter(id => otherSquad.includes(id)).length;
+                        count++;
+                    });
+                    const avgOverlap = count > 0 ? totalOverlap / count : 0;
+                    if (avgOverlap < lowestAvgOverlap) {
+                        lowestAvgOverlap = avgOverlap;
+                        insights.mostUnique = { name: team.player_name, avgOverlap: avgOverlap.toFixed(1) };
+                    }
+                });
+            }
+
+            // Benchwarmer Hero: best event_points benched player (excl. bench GK)
+            let bestBenchPoints = 0;
+            validTeams.forEach(team => {
+                if (team.currentPicks?.picks) {
+                    team.currentPicks.picks.filter(p => p.multiplier === 0).forEach(pick => {
+                        const player = playersData[pick.element];
+                        if (player && player.element_type !== 1) {
+                            const ep = player.event_points || 0;
+                            if (ep > bestBenchPoints) {
+                                bestBenchPoints = ep;
+                                insights.benchwarmHero = {
+                                    player: player.web_name,
+                                    manager: team.player_name,
+                                    points: ep
+                                };
+                            }
+                        }
+                    });
+                }
+            });
+
+            // Most Popular Formation
+            const formationCounts = {};
+            validTeams.forEach(team => {
+                if (team.currentPicks?.picks) {
+                    const starting = team.currentPicks.picks.filter(p => p.multiplier > 0);
+                    const defenders = starting.filter(p => playersData[p.element]?.element_type === 2).length;
+                    const midfielders = starting.filter(p => playersData[p.element]?.element_type === 3).length;
+                    const forwards = starting.filter(p => playersData[p.element]?.element_type === 4).length;
+                    if (defenders + midfielders + forwards === 10) { // 10 outfield players in a valid starting XI
+                        const formation = `${defenders}-${midfielders}-${forwards}`;
+                        formationCounts[formation] = (formationCounts[formation] || 0) + 1;
+                    }
+                }
+            });
+            const mostPopularFormation = Object.entries(formationCounts).sort((a, b) => b[1] - a[1])[0];
+            if (mostPopularFormation) {
+                insights.popularFormation = { formation: mostPopularFormation[0], count: mostPopularFormation[1] };
+            }
 
             return insights;
         }
@@ -2089,8 +2329,38 @@
                 cards.push(`
                     <div style="background: #d4edda; border: 1px solid #c3e6cb; border-radius: 8px; padding: 15px; text-align: center;">
                         <h4 style="color: #155724; margin-bottom: 10px;">🏆 Manager of the Week</h4>
-                        <div style="font-weight: bold; color: #155724;">${insights.managerOfTheWeek.name}</div>
+                        <div style="font-weight: bold; color: #155724;">${escapeHtml(insights.managerOfTheWeek.name)}</div>
                         <div style="color: #155724; font-size: 0.9rem;">${insights.managerOfTheWeek.points} points</div>
+                    </div>
+                `);
+            }
+
+            if (insights.gwAverage !== null) {
+                cards.push(`
+                    <div style="background: #d4edda; border: 1px solid #c3e6cb; border-radius: 8px; padding: 15px; text-align: center;">
+                        <h4 style="color: #155724; margin-bottom: 10px;">🎯 GW Average Points</h4>
+                        <div style="font-weight: bold; color: #155724; font-size: 1.4rem;">${insights.gwAverage}</div>
+                        <div style="color: #155724; font-size: 0.9rem;">league avg this gameweek</div>
+                    </div>
+                `);
+            }
+
+            if (insights.lowestGWScore) {
+                cards.push(`
+                    <div style="background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 8px; padding: 15px; text-align: center;">
+                        <h4 style="color: #721c24; margin-bottom: 10px;">😢 Lowest GW Score</h4>
+                        <div style="font-weight: bold; color: #721c24;">${escapeHtml(insights.lowestGWScore.name)}</div>
+                        <div style="color: #721c24; font-size: 0.9rem;">${insights.lowestGWScore.points} points</div>
+                    </div>
+                `);
+            }
+
+            if (insights.gwMedian !== null) {
+                cards.push(`
+                    <div style="background: #cce5ff; border: 1px solid #99d6ff; border-radius: 8px; padding: 15px; text-align: center;">
+                        <h4 style="color: #004085; margin-bottom: 10px;">📊 GW Median Score</h4>
+                        <div style="font-weight: bold; color: #004085; font-size: 1.4rem;">${insights.gwMedian}</div>
+                        <div style="color: #004085; font-size: 0.9rem;">median GW points</div>
                     </div>
                 `);
             }
@@ -2099,8 +2369,18 @@
                 cards.push(`
                     <div style="background: #fff3cd; border: 1px solid #ffeeba; border-radius: 8px; padding: 15px; text-align: center;">
                         <h4 style="color: #856404; margin-bottom: 10px;">⭐ Most Captained</h4>
-                        <div style="font-weight: bold; color: #856404;">${insights.mostCaptained.player}</div>
+                        <div style="font-weight: bold; color: #856404;">${escapeHtml(insights.mostCaptained.player)}</div>
                         <div style="color: #856404; font-size: 0.9rem;">${insights.mostCaptained.count} managers</div>
+                    </div>
+                `);
+            }
+
+            if (insights.captainSuccess) {
+                cards.push(`
+                    <div style="background: #fff3cd; border: 1px solid #ffeeba; border-radius: 8px; padding: 15px; text-align: center;">
+                        <h4 style="color: #856404; margin-bottom: 10px;">🏅 Captain Success</h4>
+                        <div style="font-weight: bold; color: #856404;">${escapeHtml(insights.captainSuccess.player)}</div>
+                        <div style="color: #856404; font-size: 0.9rem;">${insights.captainSuccess.points} GW pts (${escapeHtml(insights.captainSuccess.manager)})</div>
                     </div>
                 `);
             }
@@ -2109,8 +2389,108 @@
                 cards.push(`
                     <div style="background: #cce5ff; border: 1px solid #99d6ff; border-radius: 8px; padding: 15px; text-align: center;">
                         <h4 style="color: #004085; margin-bottom: 10px;">👥 Most Owned Player</h4>
-                        <div style="font-weight: bold; color: #004085;">${insights.mostOwned.player}</div>
-                        <div style="color: #004085; font-size: 0.9rem;">${insights.mostOwned.count} teams</div>
+                        <div style="font-weight: bold; color: #004085;">${escapeHtml(insights.mostOwned.player)}</div>
+                        <div style="color: #004085; font-size: 0.9rem;">${insights.mostOwned.count} teams (inc. bench)</div>
+                    </div>
+                `);
+            }
+
+            if (insights.biggestHaul) {
+                cards.push(`
+                    <div style="background: #d4edda; border: 1px solid #c3e6cb; border-radius: 8px; padding: 15px; text-align: center;">
+                        <h4 style="color: #155724; margin-bottom: 10px;">⚡ Biggest Points Haul</h4>
+                        <div style="font-weight: bold; color: #155724;">${escapeHtml(insights.biggestHaul.player)}</div>
+                        <div style="color: #155724; font-size: 0.9rem;">${insights.biggestHaul.points} GW pts (${escapeHtml(insights.biggestHaul.manager)})</div>
+                    </div>
+                `);
+            }
+
+            if (insights.bestValuePick) {
+                cards.push(`
+                    <div style="background: #d1ecf1; border: 1px solid #bee5eb; border-radius: 8px; padding: 15px; text-align: center;">
+                        <h4 style="color: #0c5460; margin-bottom: 10px;">💎 Best Value Pick</h4>
+                        <div style="font-weight: bold; color: #0c5460;">${escapeHtml(insights.bestValuePick.player)}</div>
+                        <div style="color: #0c5460; font-size: 0.9rem;">${insights.bestValuePick.points} pts · £${insights.bestValuePick.cost}m</div>
+                    </div>
+                `);
+            }
+
+            if (insights.bestGoalkeeper) {
+                cards.push(`
+                    <div style="background: #e2e3e5; border: 1px solid #d6d8db; border-radius: 8px; padding: 15px; text-align: center;">
+                        <h4 style="color: #383d41; margin-bottom: 10px;">🧤 Best Goalkeeper</h4>
+                        <div style="font-weight: bold; color: #383d41;">${escapeHtml(insights.bestGoalkeeper.player)}</div>
+                        <div style="color: #383d41; font-size: 0.9rem;">${insights.bestGoalkeeper.points} season pts</div>
+                    </div>
+                `);
+            }
+
+            if (insights.benchwarmHero) {
+                cards.push(`
+                    <div style="background: #ffeaa7; border: 1px solid #fdcb6e; border-radius: 8px; padding: 15px; text-align: center;">
+                        <h4 style="color: #6c5ce7; margin-bottom: 10px;">👻 Benchwarmer Hero</h4>
+                        <div style="font-weight: bold; color: #6c5ce7;">${escapeHtml(insights.benchwarmHero.player)}</div>
+                        <div style="color: #6c5ce7; font-size: 0.9rem;">${insights.benchwarmHero.points} GW pts benched (${escapeHtml(insights.benchwarmHero.manager)})</div>
+                    </div>
+                `);
+            }
+
+            if (insights.mostHitsTaken) {
+                cards.push(`
+                    <div style="background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 8px; padding: 15px; text-align: center;">
+                        <h4 style="color: #721c24; margin-bottom: 10px;">🎰 Most Hits Taken</h4>
+                        <div style="font-weight: bold; color: #721c24;">${escapeHtml(insights.mostHitsTaken.name)}</div>
+                        <div style="color: #721c24; font-size: 0.9rem;">-${insights.mostHitsTaken.hits} pts this GW</div>
+                    </div>
+                `);
+            }
+
+            if (insights.mostTransfers) {
+                cards.push(`
+                    <div style="background: #d1ecf1; border: 1px solid #bee5eb; border-radius: 8px; padding: 15px; text-align: center;">
+                        <h4 style="color: #0c5460; margin-bottom: 10px;">🔄 Most Transfers Made</h4>
+                        <div style="font-weight: bold; color: #0c5460;">${escapeHtml(insights.mostTransfers.name)}</div>
+                        <div style="color: #0c5460; font-size: 0.9rem;">${insights.mostTransfers.transfers} transfer${insights.mostTransfers.transfers !== 1 ? 's' : ''} this GW</div>
+                    </div>
+                `);
+            }
+
+            if (insights.mostConsistent) {
+                cards.push(`
+                    <div style="background: #d4edda; border: 1px solid #c3e6cb; border-radius: 8px; padding: 15px; text-align: center;">
+                        <h4 style="color: #155724; margin-bottom: 10px;">📈 Most Consistent</h4>
+                        <div style="font-weight: bold; color: #155724;">${escapeHtml(insights.mostConsistent.name)}</div>
+                        <div style="color: #155724; font-size: 0.9rem;">±${insights.mostConsistent.stdDev} pts std dev</div>
+                    </div>
+                `);
+            }
+
+            if (insights.mostVolatile) {
+                cards.push(`
+                    <div style="background: #fff3cd; border: 1px solid #ffeeba; border-radius: 8px; padding: 15px; text-align: center;">
+                        <h4 style="color: #856404; margin-bottom: 10px;">🎲 Most Volatile</h4>
+                        <div style="font-weight: bold; color: #856404;">${escapeHtml(insights.mostVolatile.name)}</div>
+                        <div style="color: #856404; font-size: 0.9rem;">±${insights.mostVolatile.stdDev} pts std dev</div>
+                    </div>
+                `);
+            }
+
+            if (insights.mostSimilar) {
+                cards.push(`
+                    <div style="background: #e2e3e5; border: 1px solid #d6d8db; border-radius: 8px; padding: 15px; text-align: center;">
+                        <h4 style="color: #383d41; margin-bottom: 10px;">🤝 Most Similar Teams</h4>
+                        <div style="font-weight: bold; color: #383d41; font-size: 0.9rem;">${escapeHtml(insights.mostSimilar.manager1)} &amp; ${escapeHtml(insights.mostSimilar.manager2)}</div>
+                        <div style="color: #383d41; font-size: 0.9rem;">${insights.mostSimilar.overlap}/15 shared players</div>
+                    </div>
+                `);
+            }
+
+            if (insights.mostUnique) {
+                cards.push(`
+                    <div style="background: #cce5ff; border: 1px solid #99d6ff; border-radius: 8px; padding: 15px; text-align: center;">
+                        <h4 style="color: #004085; margin-bottom: 10px;">🦄 Most Unique Team</h4>
+                        <div style="font-weight: bold; color: #004085;">${escapeHtml(insights.mostUnique.name)}</div>
+                        <div style="color: #004085; font-size: 0.9rem;">avg ${insights.mostUnique.avgOverlap} shared players</div>
                     </div>
                 `);
             }
@@ -2119,7 +2499,7 @@
                 cards.push(`
                     <div style="background: #d1ecf1; border: 1px solid #bee5eb; border-radius: 8px; padding: 15px; text-align: center;">
                         <h4 style="color: #0c5460; margin-bottom: 10px;">📈 Biggest Rise</h4>
-                        <div style="font-weight: bold; color: #0c5460;">${insights.biggestRise.name}</div>
+                        <div style="font-weight: bold; color: #0c5460;">${escapeHtml(insights.biggestRise.name)}</div>
                         <div style="color: #0c5460; font-size: 0.9rem;">+${insights.biggestRise.change.toLocaleString()} ranks</div>
                     </div>
                 `);
@@ -2129,7 +2509,7 @@
                 cards.push(`
                     <div style="background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 8px; padding: 15px; text-align: center;">
                         <h4 style="color: #721c24; margin-bottom: 10px;">📉 Biggest Drop</h4>
-                        <div style="font-weight: bold; color: #721c24;">${insights.biggestDrop.name}</div>
+                        <div style="font-weight: bold; color: #721c24;">${escapeHtml(insights.biggestDrop.name)}</div>
                         <div style="color: #721c24; font-size: 0.9rem;">-${insights.biggestDrop.change.toLocaleString()} ranks</div>
                     </div>
                 `);
@@ -2139,7 +2519,7 @@
                 cards.push(`
                     <div style="background: #e2e3e5; border: 1px solid #d6d8db; border-radius: 8px; padding: 15px; text-align: center;">
                         <h4 style="color: #383d41; margin-bottom: 10px;">💰 Highest Team Value</h4>
-                        <div style="font-weight: bold; color: #383d41;">${insights.bestTeamValue.name}</div>
+                        <div style="font-weight: bold; color: #383d41;">${escapeHtml(insights.bestTeamValue.name)}</div>
                         <div style="color: #383d41; font-size: 0.9rem;">£${insights.bestTeamValue.value.toFixed(1)}m</div>
                     </div>
                 `);
@@ -2149,8 +2529,38 @@
                 cards.push(`
                     <div style="background: #ffeaa7; border: 1px solid #fdcb6e; border-radius: 8px; padding: 15px; text-align: center;">
                         <h4 style="color: #6c5ce7; margin-bottom: 10px;">💸 Budget Squad</h4>
-                        <div style="font-weight: bold; color: #6c5ce7;">${insights.lowestTeamValue.name}</div>
+                        <div style="font-weight: bold; color: #6c5ce7;">${escapeHtml(insights.lowestTeamValue.name)}</div>
                         <div style="color: #6c5ce7; font-size: 0.9rem;">£${insights.lowestTeamValue.value.toFixed(1)}m</div>
+                    </div>
+                `);
+            }
+
+            if (insights.totalTransfers > 0) {
+                cards.push(`
+                    <div style="background: #d1ecf1; border: 1px solid #bee5eb; border-radius: 8px; padding: 15px; text-align: center;">
+                        <h4 style="color: #0c5460; margin-bottom: 10px;">🏃 Total League Transfers</h4>
+                        <div style="font-weight: bold; color: #0c5460; font-size: 1.4rem;">${insights.totalTransfers}</div>
+                        <div style="color: #0c5460; font-size: 0.9rem;">transfers made this GW</div>
+                    </div>
+                `);
+            }
+
+            if (insights.totalHitsCost > 0) {
+                cards.push(`
+                    <div style="background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 8px; padding: 15px; text-align: center;">
+                        <h4 style="color: #721c24; margin-bottom: 10px;">💸 Total Hits Cost</h4>
+                        <div style="font-weight: bold; color: #721c24; font-size: 1.4rem;">-${insights.totalHitsCost}</div>
+                        <div style="color: #721c24; font-size: 0.9rem;">total pts lost to hits this GW</div>
+                    </div>
+                `);
+            }
+
+            if (insights.popularFormation) {
+                cards.push(`
+                    <div style="background: #e2e3e5; border: 1px solid #d6d8db; border-radius: 8px; padding: 15px; text-align: center;">
+                        <h4 style="color: #383d41; margin-bottom: 10px;">📋 Most Popular Formation</h4>
+                        <div style="font-weight: bold; color: #383d41; font-size: 1.4rem;">${escapeHtml(insights.popularFormation.formation)}</div>
+                        <div style="color: #383d41; font-size: 0.9rem;">${insights.popularFormation.count} manager${insights.popularFormation.count !== 1 ? 's' : ''}</div>
                     </div>
                 `);
             }
