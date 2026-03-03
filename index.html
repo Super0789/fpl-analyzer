@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FPL Analyzer - Fixed Version</title>
+    <title>FPL Analyzer Pro</title>
     <style>
         * {
             margin: 0;
@@ -56,6 +56,63 @@
 
         .status-indicator.error {
             background: #dc3545;
+        }
+
+        :root {
+            --bg-primary: white;
+            --bg-secondary: #f8f9fa;
+            --text-primary: #333;
+            --text-secondary: #666;
+            --border-color: #dee2e6;
+        }
+
+        body.dark-mode {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        }
+
+        body.dark-mode .container {
+            background: #1e1e2e;
+            color: #e0e0e0;
+        }
+
+        body.dark-mode .stat-card {
+            background: #2d2d44;
+            color: #e0e0e0;
+        }
+
+        body.dark-mode .stat-card h4,
+        body.dark-mode .stat-value,
+        body.dark-mode .stat-description {
+            color: #e0e0e0;
+        }
+
+        .dark-mode-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            background: rgba(0,0,0,0.6);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 44px;
+            height: 44px;
+            font-size: 1.2rem;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+
+        #results {
+            transition: opacity 0.3s ease;
+        }
+
+        .stat-card {
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
         }
 
         @keyframes pulse {
@@ -296,6 +353,7 @@
     </style>
 </head>
 <body>
+    <button class="dark-mode-btn" onclick="document.body.classList.toggle('dark-mode')" title="Toggle dark mode">🌙</button>
     <div class="container">
         <div class="header">
             <h1>🏆 FPL Analyzer</h1>
@@ -598,52 +656,6 @@
             });
         }
 
-
-        async function testProxyServices() {
-            updateProxyStatus('🔄 Testing proxy services...');
-            
-            const testUrl = 'https://fantasy.premierleague.com/api/bootstrap-static/';
-            
-            // Test proxies one by one and stop at first working one
-            for (const proxy of proxyServices) {
-                try {
-                    updateProxyStatus(`Testing ${proxy.name}...`);
-                    
-                    const proxyUrl = proxy.url + encodeURIComponent(testUrl);
-                    const timeoutPromise = new Promise((_, reject) => 
-                        setTimeout(() => reject(new Error('Timeout')), 6000) // Reduced timeout
-                    );
-                    
-                    const fetchPromise = proxy.handler(proxyUrl);
-                    const data = await Promise.race([fetchPromise, timeoutPromise]);
-                    
-                    if (data && data.elements && data.elements.length > 0) {
-                        proxy.active = true;
-                        workingProxy = proxy;
-                        console.log(`${proxy.name} proxy working successfully`);
-                        
-                        // Success - stop testing other proxies
-                        updateProxyStatus(`✅ Connected via ${workingProxy.name}`, 'connected');
-                        document.getElementById('connectionStatus').className = 'status-indicator connected';
-                        document.getElementById('proxyResults').innerHTML = `✅ ${proxy.name} - Working`;
-                        enableButtons();
-                        
-                        // Start preloading creator data in background (don't wait for it)
-                        preloadContentCreatorDataBackground();
-                        return;
-                    }
-                } catch (error) {
-                    console.warn(`${proxy.name} proxy failed:`, error);
-                }
-            }
-
-            // If we get here, all proxies failed
-            updateProxyStatus('❌ All proxy services failed. Please try again later.', 'error');
-            document.getElementById('connectionStatus').className = 'status-indicator error';
-            document.getElementById('proxyResults').innerHTML = '❌ All proxy services failed';
-            showFallbackOptions();
-        }
-
         // REPLACE the existing preloadContentCreatorData function with this background version
         async function preloadContentCreatorDataBackground() {
             if (isLoadingCreators) return;
@@ -771,62 +783,6 @@
                 return null;
             }
         }
-
-        // ADD new function to manually refresh creator cache
-        function refreshCreatorCache() {
-            const button = event.target;
-            const originalText = button.textContent;
-            button.textContent = '🔄 Refreshing...';
-            button.disabled = true;
-            
-            // Clear cache and reload
-            localStorage.removeItem(contentCreatorCacheKey);
-            contentCreatorData = {};
-            
-            // Restart background loading
-            preloadContentCreatorDataBackground().then(() => {
-                button.textContent = originalText;
-                button.disabled = false;
-                
-                // Show success message
-                const successDiv = document.createElement('div');
-                successDiv.style.cssText = 'position: fixed; top: 20px; right: 20px; background: #d4edda; border: 1px solid #c3e6cb; color: #155724; padding: 15px; border-radius: 8px; z-index: 1000; box-shadow: 0 4px 8px rgba(0,0,0,0.1);';
-                successDiv.innerHTML = '✅ Creator data refreshed successfully!';
-                document.body.appendChild(successDiv);
-                
-                setTimeout(() => {
-                    document.body.removeChild(successDiv);
-                }, 3000);
-            });
-        }
-
-        // ADD cache status display function
-        function getCacheStatus() {
-            const cached = localStorage.getItem(contentCreatorCacheKey);
-            if (!cached) return 'No cache available';
-            
-            try {
-                const cacheData = JSON.parse(cached);
-                const cacheAge = Date.now() - cacheData.timestamp;
-                const hoursOld = Math.floor(cacheAge / (1000 * 60 * 60));
-                const minutesOld = Math.floor((cacheAge % (1000 * 60 * 60)) / (1000 * 60));
-                
-                const validCreators = Object.values(cacheData.data).filter(c => c.starting11 && c.starting11.length > 0).length;
-                
-                if (hoursOld > 0) {
-                    return `Cache: ${validCreators} creators, ${hoursOld}h ${minutesOld}m old`;
-                } else {
-                    return `Cache: ${validCreators} creators, ${minutesOld}m old`;
-                }
-            } catch (error) {
-                return 'Cache corrupted';
-            }
-        }
-
-
-
-
-
 
 
         // ADD this new function to handle the league size selection
@@ -1001,21 +957,6 @@
             document.getElementById('results').style.display = 'block';
         }
 
-        function showError(message) {
-            document.getElementById('results').innerHTML = `
-                <div class="error">
-                    <strong>Error:</strong> ${message}<br><br>
-                    <strong>What you can try:</strong>
-                    <ul>
-                        <li>Check if the team/league ID is correct</li>
-                        <li>Refresh the page to reconnect to proxy services</li>
-                        <li>Try again in a few minutes</li>
-                    </ul>
-                </div>
-            `;
-            hideLoading();
-        }
-
         // Initialize data
         async function initializeData() {
             if (Object.keys(playersData).length > 0) {
@@ -1092,7 +1033,25 @@
                 const creatorMatches = await compareWithCreators(picksData.picks);
                 updateProgressStep(stepId4, `Compared with ${creatorMatches.length} content creators`, 'completed');
 
-                generateTeamAnalysis(teamData, picksData, historyData, creatorMatches);
+                const stepId5 = addProgressStep(`Fetching live GW${currentGameweek} points...`, 'pending');
+                let liveData = null;
+                try {
+                    liveData = await fetchWithProxy(`event/${currentGameweek}/live/`);
+                    updateProgressStep(stepId5, `Live GW${currentGameweek} data loaded`, 'completed');
+                } catch (liveError) {
+                    updateProgressStep(stepId5, 'Live data unavailable (optional)', 'completed');
+                }
+
+                const stepId6 = addProgressStep('Fetching fixture data...', 'pending');
+                let fixtureData = null;
+                try {
+                    fixtureData = await fetchWithProxy('fixtures/');
+                    updateProgressStep(stepId6, `Fixture data loaded`, 'completed');
+                } catch (fixtureError) {
+                    updateProgressStep(stepId6, 'Fixture data unavailable (optional)', 'completed');
+                }
+
+                generateTeamAnalysis(teamData, picksData, historyData, creatorMatches, liveData, fixtureData);
 
             } catch (error) {
                 console.error('Team analysis error:', error);
@@ -1196,7 +1155,7 @@
 
 
         // Generate team analysis with interesting facts
-        function generateTeamAnalysis(teamData, picksData, historyData, creatorMatches) {
+        function generateTeamAnalysis(teamData, picksData, historyData, creatorMatches, liveData, fixtureData) {
             const captain = picksData.picks.find(pick => pick.is_captain);
             const captainPlayer = captain ? playersData[captain.element] : null;
             const viceCaptain = picksData.picks.find(pick => pick.is_vice_captain);
@@ -1209,6 +1168,39 @@
 
             // Calculate interesting team facts
             const teamFacts = calculateTeamFacts(picksData, historyData, teamData);
+
+            // Build live points lookup
+            const livePointsMap = {};
+            if (liveData && liveData.elements) {
+                liveData.elements.forEach(el => {
+                    livePointsMap[el.id] = {
+                        points: el.stats.total_points,
+                        bps: el.stats.bps,
+                        bonus: el.stats.bonus
+                    };
+                });
+            }
+
+            // Build fixture lookup by team id
+            const upcomingFixtures = {};
+            if (fixtureData) {
+                const nextGW = currentGameweek + 1;
+                fixtureData.filter(f => f.event === nextGW).forEach(f => {
+                    if (!upcomingFixtures[f.team_h]) upcomingFixtures[f.team_h] = [];
+                    if (!upcomingFixtures[f.team_a]) upcomingFixtures[f.team_a] = [];
+                    upcomingFixtures[f.team_h].push({ opponent: f.team_a, difficulty: f.team_h_difficulty, home: true });
+                    upcomingFixtures[f.team_a].push({ opponent: f.team_h, difficulty: f.team_a_difficulty, home: false });
+                });
+            }
+
+            // Calculate live GW total for starting XI with captain multiplier
+            let liveGWTotal = 0;
+            if (Object.keys(livePointsMap).length > 0) {
+                picksData.picks.filter(pick => pick.multiplier > 0).forEach(pick => {
+                    const lp = livePointsMap[pick.element];
+                    if (lp) liveGWTotal += lp.points * pick.multiplier;
+                });
+            }
 
             const html = `
                 <div style="margin: 30px 0; padding: 20px; background: white; border-radius: 10px; box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);">
@@ -1250,6 +1242,29 @@
                             ${generateTeamFactCards(teamFacts)}
                         </div>
                     </div>
+
+                    ${Object.keys(livePointsMap).length > 0 ? `
+                    <div style="margin: 20px 0; background: linear-gradient(135deg, #007bff22, #007bff11); border: 1px solid #007bff55; border-radius: 10px; padding: 20px;">
+                        <h3 style="color: #007bff; margin-bottom: 15px; text-align: center;">⚡ Live GW${currentGameweek} Points</h3>
+                        <div style="text-align: center; font-size: 2.5rem; font-weight: bold; color: #007bff; margin-bottom: 10px;">${liveGWTotal}</div>
+                        <div style="text-align: center; color: #666; font-size: 0.9rem; margin-bottom: 15px;">Live GW total (Starting XI + captain multiplier)</div>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px;">
+                            ${picksData.picks.filter(pick => pick.multiplier > 0).map(pick => {
+                                const player = playersData[pick.element];
+                                const lp = livePointsMap[pick.element];
+                                if (!lp) return '';
+                                return `
+                                    <div style="background: white; border-radius: 6px; padding: 8px; text-align: center; border-left: 3px solid ${lp.bonus > 0 ? '#ffc107' : '#007bff'};">
+                                        <div style="font-weight: bold; font-size: 0.85rem;">${pick.is_captain ? '(C) ' : ''}${player ? player.web_name : '?'}</div>
+                                        <div style="color: #007bff; font-weight: bold;">${lp.points * pick.multiplier} pts</div>
+                                        ${lp.bonus > 0 ? `<div style="color: #856404; font-size: 0.75rem;">+${lp.bonus} bonus ⭐</div>` : ''}
+                                        <div style="color: #999; font-size: 0.75rem;">BPS: ${lp.bps}</div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                    ` : ''}
 
                     ${creatorMatches.length > 0 ? `
                         <div style="background: #fff3cd; border: 1px solid #ffeeba; border-radius: 10px; padding: 20px; margin: 20px 0;">
@@ -1311,7 +1326,11 @@
                                     const player = playersData[pick.element];
                                     const isStarPlayer = player && player.total_points > 80;
                                     const borderColor = pick.is_captain ? '#ffc107' : pick.is_vice_captain ? '#6c757d' : '#38003c';
-                                    
+                                    const lp = livePointsMap[pick.element];
+                                    const ownership = player ? parseFloat(player.selected_by_percent || 0).toFixed(1) : '0.0';
+                                    const priceRise = player && player.cost_change_event > 0;
+                                    const priceFall = player && player.cost_change_event < 0;
+                                    const priceIndicator = priceRise ? ' 🟢' : priceFall ? ' 🔴' : '';
                                     return `
                                         <div style="background: white; border: 2px solid ${borderColor}; border-radius: 8px; padding: 8px 12px; text-align: center; ${isStarPlayer ? 'box-shadow: 0 0 10px rgba(255, 193, 7, 0.3);' : ''}">
                                             <div style="font-weight: bold; color: #38003c;">
@@ -1321,11 +1340,14 @@
                                                 ${isStarPlayer ? ' ⭐' : ''}
                                             </div>
                                             <div style="color: #666; font-size: 0.8rem;">
-                                                ${player ? teamsData[player.team]?.short_name : ''} - £${player ? (player.now_cost / 10).toFixed(1) : '0.0'}m
+                                                ${player ? teamsData[player.team]?.short_name : ''} - £${player ? (player.now_cost / 10).toFixed(1) : '0.0'}m${priceIndicator}
                                             </div>
                                             <div style="color: #28a745; font-size: 0.8rem; font-weight: bold;">
-                                                ${player ? player.total_points : 0} pts
+                                                ${player ? player.total_points : 0} pts season
                                             </div>
+                                            ${lp ? `<div style="color: #007bff; font-size: 0.8rem; font-weight: bold;">Live: ${lp.points}pts${lp.bonus > 0 ? ` +${lp.bonus}⭐` : ''} BPS:${lp.bps}</div>` : ''}
+                                            <div style="color: #999; font-size: 0.75rem;">👥 ${ownership}% owned</div>
+                                            ${upcomingFixtures[player?.team] ? '<div style="font-size: 0.7rem; margin-top: 2px;">' + upcomingFixtures[player.team].map(f => { const fdrColor = f.difficulty <= 2 ? '#28a745' : f.difficulty === 3 ? '#ffc107' : '#dc3545'; return '<span style="background: ' + fdrColor + '; color: white; padding: 1px 4px; border-radius: 3px; margin: 1px;">' + (teamsData[f.opponent]?.short_name || '?') + '(' + (f.home?'H':'A') + ')</span>'; }).join('') + '</div>' : ''}
                                         </div>
                                     `;
                                 }).join('')}
@@ -1347,6 +1369,26 @@
                                         </div>
                                     `;
                                 }).join('')}
+                            </div>
+                            <!-- Defensive Stats -->
+                            <div style="margin-top: 20px; padding: 15px; background: #f0f4ff; border-radius: 8px;">
+                                <h5 style="margin-bottom: 10px; color: #38003c;">🛡️ Defensive Contribution</h5>
+                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px;">
+                                    ${picksData.picks.filter(pick => pick.multiplier > 0).map(pick => {
+                                        const player = playersData[pick.element];
+                                        if (!player || (player.element_type !== 1 && player.element_type !== 2 && player.element_type !== 3)) return '';
+                                        const pos = getPlayerPosition(player.element_type);
+                                        return `
+                                            <div style="background: white; border-radius: 6px; padding: 8px; font-size: 0.8rem;">
+                                                <div style="font-weight: bold; color: #38003c;">${player.web_name} <span style="color: #666;">(${pos})</span></div>
+                                                <div>Clean Sheets: <strong>${player.clean_sheets}</strong></div>
+                                                ${player.element_type === 1 ? `<div>Saves: <strong>${player.saves}</strong></div>` : ''}
+                                                <div>Goals Conceded: <strong>${player.goals_conceded}</strong></div>
+                                                <div style="color: #666; font-size: 0.75rem;">${(player.clean_sheets_per_90 || 0).toFixed(2)} CS/90</div>
+                                            </div>
+                                        `;
+                                    }).filter(s => s).join('')}
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1729,6 +1771,138 @@
                     </div>
 
                     ${validTeams.length > 0 ? `
+                        <!-- GW Points Distribution -->
+                        ${(() => {
+                            const gwPoints = validTeams.map(team => {
+                                const gwData = team.history?.current?.find(gw => gw.event === currentGameweek);
+                                return gwData ? gwData.points : null;
+                            }).filter(p => p !== null);
+                            if (gwPoints.length === 0) return '';
+                            const sorted = [...gwPoints].sort((a, b) => a - b);
+                            const median = sorted[Math.floor(sorted.length / 2)];
+                            const mean = Math.round(gwPoints.reduce((a, b) => a + b, 0) / gwPoints.length);
+                            const best = Math.max(...gwPoints);
+                            const worst = Math.min(...gwPoints);
+                            const stdDev = Math.round(Math.sqrt(gwPoints.reduce((sum, p) => sum + Math.pow(p - mean, 2), 0) / gwPoints.length));
+                            return `
+                            <div style="margin: 30px 0; background: #f8f9fa; border-radius: 10px; padding: 20px;">
+                                <h4>📊 GW${currentGameweek} Points Distribution</h4>
+                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-top: 15px;">
+                                    <div style="background: #d4edda; border-radius: 8px; padding: 12px; text-align: center;">
+                                        <div style="font-size: 0.8rem; color: #155724;">Best Score</div>
+                                        <div style="font-size: 1.5rem; font-weight: bold; color: #155724;">${best}</div>
+                                    </div>
+                                    <div style="background: #f8d7da; border-radius: 8px; padding: 12px; text-align: center;">
+                                        <div style="font-size: 0.8rem; color: #721c24;">Worst Score</div>
+                                        <div style="font-size: 1.5rem; font-weight: bold; color: #721c24;">${worst}</div>
+                                    </div>
+                                    <div style="background: #cce5ff; border-radius: 8px; padding: 12px; text-align: center;">
+                                        <div style="font-size: 0.8rem; color: #004085;">Median</div>
+                                        <div style="font-size: 1.5rem; font-weight: bold; color: #004085;">${median}</div>
+                                    </div>
+                                    <div style="background: #fff3cd; border-radius: 8px; padding: 12px; text-align: center;">
+                                        <div style="font-size: 0.8rem; color: #856404;">Average</div>
+                                        <div style="font-size: 1.5rem; font-weight: bold; color: #856404;">${mean}</div>
+                                    </div>
+                                    <div style="background: #e2e3e5; border-radius: 8px; padding: 12px; text-align: center;">
+                                        <div style="font-size: 0.8rem; color: #383d41;">Std Dev</div>
+                                        <div style="font-size: 1.5rem; font-weight: bold; color: #383d41;">±${stdDev}</div>
+                                    </div>
+                                </div>
+                            </div>`;
+                        })()}
+
+                        <!-- Chip Usage -->
+                        ${(() => {
+                            const chipUsage = { bboost: [], '3xc': [], freehit: [], wildcard: [] };
+                            const chipLabels = { bboost: '🚀 Bench Boost', '3xc': '3️⃣ Triple Captain', freehit: '🆓 Free Hit', wildcard: '🃏 Wildcard' };
+                            validTeams.forEach(team => {
+                                if (team.history?.chips) {
+                                    team.history.chips.forEach(chip => {
+                                        if (chipUsage[chip.name]) chipUsage[chip.name].push({ manager: team.player_name, gw: chip.event });
+                                    });
+                                }
+                            });
+                            const hasChips = Object.values(chipUsage).some(arr => arr.length > 0);
+                            if (!hasChips) return '';
+                            return `
+                            <div style="margin: 30px 0; background: #f8f9fa; border-radius: 10px; padding: 20px;">
+                                <h4>🎮 Chip Usage</h4>
+                                <div style="display: grid; gap: 10px; margin-top: 15px;">
+                                    ${Object.entries(chipUsage).filter(([, users]) => users.length > 0).map(([chip, users]) => `
+                                        <div style="background: white; border-radius: 8px; padding: 12px; border-left: 4px solid #764ba2;">
+                                            <div style="font-weight: bold; margin-bottom: 6px;">${chipLabels[chip] || chip} — ${users.length} manager(s)</div>
+                                            <div style="font-size: 0.85rem; color: #555;">${users.map(u => u.manager + ' (GW' + u.gw + ')').join(', ')}</div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>`;
+                        })()}
+
+                        <!-- Transfer Activity -->
+                        ${(() => {
+                            const transferData = validTeams.map(team => {
+                                const gwHistory = team.history?.current?.find(gw => gw.event === currentGameweek);
+                                return {
+                                    name: team.player_name,
+                                    transfers: gwHistory?.event_transfers || 0,
+                                    hits: gwHistory?.event_transfers_cost || 0
+                                };
+                            }).sort((a, b) => b.transfers - a.transfers);
+                            const hasTransfers = transferData.some(t => t.transfers > 0);
+                            if (!hasTransfers) return '';
+                            const hitsManagers = transferData.filter(t => t.hits > 0);
+                            return `
+                            <div style="margin: 30px 0; background: #f8f9fa; border-radius: 10px; padding: 20px;">
+                                <h4>🔄 GW${currentGameweek} Transfer Activity</h4>
+                                <div style="margin-top: 15px; display: grid; gap: 8px;">
+                                    ${transferData.filter(t => t.transfers > 0).slice(0, 10).map(t => `
+                                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: white; border-radius: 6px;">
+                                            <span>${t.name}</span>
+                                            <div>
+                                                <span style="background: #007bff; color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.8rem;">${t.transfers} transfer${t.transfers !== 1 ? 's' : ''}</span>
+                                                ${t.hits > 0 ? '<span style="background: #dc3545; color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.8rem; margin-left: 5px;">-' + t.hits + ' hit</span>' : ''}
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                    ${hitsManagers.length > 0 ? '<div style="margin-top: 5px; color: #dc3545; font-size: 0.85rem;">⚠️ Managers taking hits: ' + hitsManagers.map(m => m.name).join(', ') + '</div>' : ''}
+                                </div>
+                            </div>`;
+                        })()}
+
+                        <!-- Differential Picks -->
+                        ${(() => {
+                            const threshold = Math.ceil(validTeams.length * 0.2);
+                            const playerCounts = {};
+                            validTeams.forEach(team => {
+                                if (team.currentPicks?.picks) {
+                                    team.currentPicks.picks.forEach(pick => {
+                                        playerCounts[pick.element] = (playerCounts[pick.element] || 0) + 1;
+                                    });
+                                }
+                            });
+                            const differentials = Object.entries(playerCounts)
+                                .map(([id, count]) => ({ player: playersData[parseInt(id)], count }))
+                                .filter(d => d.player && d.count <= threshold)
+                                .sort((a, b) => b.player.total_points - a.player.total_points)
+                                .slice(0, 8);
+                            if (differentials.length === 0) return '';
+                            return `
+                            <div style="margin: 30px 0; background: #f8f9fa; border-radius: 10px; padding: 20px;">
+                                <h4>💎 Differential Picks <small style="font-weight: normal; color: #666;">(owned by ≤${Math.round((threshold/validTeams.length)*100)}% of league)</small></h4>
+                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-top: 15px;">
+                                    ${differentials.map(d => `
+                                        <div style="background: white; border-radius: 8px; padding: 10px; text-align: center; border: 1px solid #dee2e6;">
+                                            <div style="font-weight: bold;">${d.player.web_name}</div>
+                                            <div style="color: #666; font-size: 0.8rem;">${teamsData[d.player.team]?.short_name} - ${getPlayerPosition(d.player.element_type)}</div>
+                                            <div style="color: #28a745; font-weight: bold;">${d.player.total_points} pts</div>
+                                            <div style="color: #764ba2; font-size: 0.8rem;">${d.count}/${validTeams.length} owners</div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>`;
+                        })()}
+
                         <div style="margin: 30px 0;">
                             <h4>🎯 Popular Picks This Gameweek</h4>
                             <div style="display: grid; gap: 10px; margin-top: 15px;">
@@ -2332,8 +2506,12 @@
 
             testProxyServices();
 
-            console.log('FPL Analyzer (Fixed Version) loaded successfully!');
+            console.log('FPL Analyzer Pro loaded successfully!');
         });
     </script>
+    <div style="text-align: center; padding: 20px; color: rgba(255,255,255,0.7); font-size: 0.85rem; margin-top: 10px;">
+        <strong>FPL Analyzer Pro</strong> — v2.0.0 | Data from <a href="https://fantasy.premierleague.com" style="color: rgba(255,255,255,0.9);">fantasy.premierleague.com</a>
+        <br><small>Not affiliated with the Premier League or FPL. For personal use only.</small>
+    </div>
 </body>
 </html>
