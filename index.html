@@ -353,7 +353,7 @@
     </style>
 </head>
 <body>
-    <button class="dark-mode-btn" onclick="document.body.classList.toggle('dark-mode')" title="Toggle dark mode">🌙</button>
+    <button class="dark-mode-btn" onclick="this.setAttribute('aria-pressed', document.body.classList.toggle('dark-mode'))" title="Toggle dark mode" aria-label="Toggle dark mode" aria-pressed="false">🌙</button>
     <div class="container">
         <div class="header">
             <h1>🏆 FPL Analyzer</h1>
@@ -1154,6 +1154,17 @@
 
 
 
+        function generateFDRBadges(fixtures) {
+            if (!fixtures || fixtures.length === 0) return '';
+            const badges = fixtures.map(f => {
+                const fdrColor = f.difficulty <= 2 ? '#28a745' : f.difficulty === 3 ? '#ffc107' : '#dc3545';
+                const opponentName = teamsData[f.opponent]?.short_name || '?';
+                const venue = f.home ? 'H' : 'A';
+                return '<span style="background: ' + fdrColor + '; color: white; padding: 1px 4px; border-radius: 3px; margin: 1px;">' + opponentName + '(' + venue + ')</span>';
+            }).join('');
+            return '<div style="font-size: 0.7rem; margin-top: 2px;">' + badges + '</div>';
+        }
+
         // Generate team analysis with interesting facts
         function generateTeamAnalysis(teamData, picksData, historyData, creatorMatches, liveData, fixtureData) {
             const captain = picksData.picks.find(pick => pick.is_captain);
@@ -1345,9 +1356,9 @@
                                             <div style="color: #28a745; font-size: 0.8rem; font-weight: bold;">
                                                 ${player ? player.total_points : 0} pts season
                                             </div>
-                                            ${lp ? `<div style="color: #007bff; font-size: 0.8rem; font-weight: bold;">Live: ${lp.points}pts${lp.bonus > 0 ? ` +${lp.bonus}⭐` : ''} BPS:${lp.bps}</div>` : ''}
+                                            ${lp ? `<div style="color: #007bff; font-size: 0.8rem; font-weight: bold;">Live: ${lp.points}pts${lp.bonus > 0 ? ` +${lp.bonus}⭐` : ''} | BPS: ${lp.bps}</div>` : ''}
                                             <div style="color: #999; font-size: 0.75rem;">👥 ${ownership}% owned</div>
-                                            ${upcomingFixtures[player?.team] ? '<div style="font-size: 0.7rem; margin-top: 2px;">' + upcomingFixtures[player.team].map(f => { const fdrColor = f.difficulty <= 2 ? '#28a745' : f.difficulty === 3 ? '#ffc107' : '#dc3545'; return '<span style="background: ' + fdrColor + '; color: white; padding: 1px 4px; border-radius: 3px; margin: 1px;">' + (teamsData[f.opponent]?.short_name || '?') + '(' + (f.home?'H':'A') + ')</span>'; }).join('') + '</div>' : ''}
+                                             ${player?.team ? generateFDRBadges(upcomingFixtures[player.team]) : ''}
                                         </div>
                                     `;
                                 }).join('')}
@@ -2509,8 +2520,8 @@
             console.log('FPL Analyzer Pro loaded successfully!');
         });
     </script>
-    <div style="text-align: center; padding: 20px; color: rgba(255,255,255,0.7); font-size: 0.85rem; margin-top: 10px;">
-        <strong>FPL Analyzer Pro</strong> — v2.0.0 | Data from <a href="https://fantasy.premierleague.com" style="color: rgba(255,255,255,0.9);">fantasy.premierleague.com</a>
+    <div style="text-align: center; padding: 20px; color: rgba(255,255,255,0.85); font-size: 0.85rem; margin-top: 10px; text-shadow: 0 1px 2px rgba(0,0,0,0.4);">
+        <strong>FPL Analyzer Pro</strong> — v2.0.0 | Data from <a href="https://fantasy.premierleague.com" style="color: white;">fantasy.premierleague.com</a>
         <br><small>Not affiliated with the Premier League or FPL. For personal use only.</small>
     </div>
 </body>
